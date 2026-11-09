@@ -7,7 +7,7 @@
     "node": ">=22.22.0 <23"
   },
   "scripts": {
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test tests/*.test.ts tests/integration/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
