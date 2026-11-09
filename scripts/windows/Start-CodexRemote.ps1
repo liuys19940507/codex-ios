@@ -18,5 +18,10 @@ $control = Join-Path $repo 'bridge/scripts/service-control.ts'
 $serviceJSON = & $NodeExe $tsx $control --config $configFile
 if ($LASTEXITCODE -ne 0) { throw 'Shared service failed to start; see diagnostic above' }
 $service = $serviceJSON | ConvertFrom-Json
+$bridgeControl = Join-Path $repo 'bridge/scripts/bridge-control.ts'
+$bridgeJSON = & $NodeExe $tsx $bridgeControl --config $configFile
+if ($LASTEXITCODE -ne 0) { throw 'Bridge service failed to start; see diagnostic above' }
+$bridge = $bridgeJSON | ConvertFrom-Json
+Write-Host "Phone bridge: $($bridge.bridgeUrl)"
 Write-Host "Shared instance $($service.instanceId) (Codex PID $($service.pid)); CLI exit keeps its tasks running."
 Invoke-CodexRemoteClient -CodexExe $config.codexExe -RemoteUrl $service.codexUrl -TokenFile (Join-Path $config.stateDir 'codex-token') -ProjectPath $project[0].path -Prompt $Prompt -CliArguments $CodexArguments -NodeExe $NodeExe

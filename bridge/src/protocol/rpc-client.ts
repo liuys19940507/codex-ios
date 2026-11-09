@@ -12,6 +12,7 @@ export interface RpcClient {
   requestAtBarrier(method:string,params:Json,apply:(value:Json)=>void):Promise<Json>;
   respond(id: string | number, result: Json): void;
   onEvent(handler: (message: Json) => void): () => void;
+  onClose(handler: () => void): () => void;
   close(): Promise<void>;
 }
 
@@ -30,6 +31,7 @@ class WebSocketRpcClient implements RpcClient {
   private nextId = 1;
   private readonly pending = new Map<number, Waiter>();
   private readonly handlers = new Set<(message: Json) => void>();
+  private readonly closeHandlers = new Set<() => void>();
   private backlog: Json[] = [];
   private failed = false;
 
@@ -127,6 +129,12 @@ class WebSocketRpcClient implements RpcClient {
     });
   }
 
+  onClose(handler: () => void): () => void {
+    if (this.failed) { queueMicrotask(handler); return () => {}; }
+    this.closeHandlers.add(handler);
+    return () => { this.closeHandlers.delete(handler); };
+  }
+
   private sendRequest(method: string, params: Json, apply?: (value:Json)=>void): Promise<Json> {
     return new Promise((resolve, reject) => {
       if (this.failed || this.socket.readyState !== WebSocket.OPEN) {
@@ -162,6 +170,8 @@ class WebSocketRpcClient implements RpcClient {
     }
     this.pending.clear();
     this.backlog = [];
+    for (const handler of this.closeHandlers) handler();
+    this.closeHandlers.clear();
     if (this.socket.readyState !== WebSocket.CLOSED) this.socket.close();
   }
 }

@@ -4,6 +4,17 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { connectRpc } from '../src/protocol/rpc-client.js';
 import { fakeServer, handshake, type Message } from './support/fake-server.js';
 
+test('disconnect_notification_fires_once_and_can_be_unsubscribed',async t=>{
+  const server=await fakeServer((socket,m)=>{if(handshake(socket,m)||m.method==='initialized')return;socket.terminate();});
+  t.after(()=>server.close());
+  const client=await connectRpc(server.url,'test');t.after(()=>client.close());
+  let calls=0,removed=0;
+  const closed=new Promise<void>(resolve=>client.onClose(()=>{calls++;resolve();}));
+  const unsubscribe=client.onClose(()=>removed++);unsubscribe();
+  await assert.rejects(client.request('thread/read',{threadId:'own'}));await closed;
+  await client.close();assert.equal(calls,1);assert.equal(removed,0);
+});
+
 test('snapshot_barrier: applies a response synchronously before a following delta frame', async t => {
   const server=await fakeServer((socket,msg)=>{
     if(handshake(socket,msg)||!msg.method||msg.method==='initialized')return;

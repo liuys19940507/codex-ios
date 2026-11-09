@@ -2,9 +2,9 @@
 
 面向个人使用的原生 iOS 客户端项目，用于远程查看和操作 Windows PowerShell 中由共享 Codex app-server 承载的任务。
 
-正在按已批准计划实现。Windows RPC 与专用启动器已通过测试，真实共享 CLI 的晚加入接管、已有审批和 CLI/PowerShell 退出后任务继续运行已验证。iOS 最小应用已通过模拟器测试并生成未签名真机 IPA；它目前只有入口界面，尚未安装到手机。
+正在按已批准计划实现。Windows 共享 CLI 的晚加入接管、已有审批、继续指令、中断及 CLI/PowerShell 退出后任务继续运行已验证。iOS 首次真机安装和打开已通过；连接配置页已通过云端测试，完整任务界面仍在开发。
 
-W4 实测发现上游无法立即恢复正在输出消息的前文；[恢复行为修订](docs/superpowers/specs/2026-11-08-live-stream-recovery-amendment.md)待确认，完整桥接和手机控制界面尚未完成。
+中途接入生成中的消息时，先标记部分输出，结束后用完整消息补齐；用户已接受并完成[恢复行为修订](docs/superpowers/specs/2026-11-08-live-stream-recovery-amendment.md)验证。Windows 配置及启动方式见[运行说明](docs/windows-setup.md)。
 
 ## 方案方向
 

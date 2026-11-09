@@ -79,3 +79,11 @@ The real dispatcher on native0.167.0 passed steering, interruption, rename, arch
 The probe found and fixed a real subscription bug: thread/started is a global announcement, so it cannot mark an independent client as subscribed. A regression first failed with zero resume calls, then passed after readiness was restricted to the snapshot/resume barrier. New threads without a first turn can lack a persisted rollout; the live attachment probe therefore joins an already streaming task, matching the takeover use case. Empty pre-turn hydration is not claimed as verified.
 
 File approvals, questions, requested permission subsets and typed MCP forms have protocol/schema tests. Their real native request-generation paths remain untriggered; URL/verification/openai-form MCP flows remain read-only. Queue is disabled. Shared JSON fixtures are synthetic, contain no credentials, and are decoded by both Node and Swift tests.
+
+## W7 authenticated EasyTier entry
+
+On2026-11-09, the actual PowerShell launcher reused native Codex0.167.0 and started/reused the detached bridge at10.147.21.2:8391. The native --help exit check returned0 without creating a model task; the independent app-server remained running. Existing W3 tests cover task survival, while this check covers the new bridge startup integration.
+
+From the Aliyun node10.147.21.1, an unauthenticated HTTP request returned401; the bearer-authenticated /v1/info returned apiVersion1 and codexVersion0.167.0 with the expected persistent serverId. Credentials were transferred in a temporary root-only curl config and then cleared on both machines. The bridge listens only on the Windows EasyTier address, with a Node-specific inbound TCP8391 rule limited to10.147.21.0/24. The phone was not connected during this check; real iOS HTTP/WS pairing remains pending.
+
+An initial worker launched through the tsx CLI exited after its short-lived startup parent. The production worker now imports the pinned TypeScript loader directly into the detached Node process; a real process regression verifies that the returned PID is the server's PID. The actual worker then remained available after parent exit and passed the cloud-to-Windows check. No existing user process was stopped; only the owned diagnostic bridge was restarted, and the shared app-server was preserved.
