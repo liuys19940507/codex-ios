@@ -16,6 +16,14 @@ Validated on Windows PowerShell, native Codex CLI **0.167.0**, Node **22.22.0**,
 
 The final live probe returned `passed: true` with `sameLiveTurn`, `lateApproval`, `cliExitPreservesTask`, `duplicateResponseIgnored` and `reconnectRestoresState` all true. Its synthetic contract tests passed 3/3; deliberately disabling fake-server approval replay made those assertions fail. Synthetic results are not the basis of the live conclusions above.
 
+## Windows launcher follow-up
+
+The implemented runtime started and reused the same owned native app-server instance, authenticated successfully, and restricted its capability-token file ACL to the current Windows user. Six runtime contract tests and two Pester 5.7.1 tests passed, including capture in an actual native process for Chinese, spaces, shell metacharacters, embedded quotes, an empty argument and trailing backslashes. Child credentials did not replace the parent environment.
+
+A real PowerShell launcher connected a CLI and created a controlled thread. Its first 45-second sleep completed. A follow-up 60-second sleep turn was started by RPC in that same CLI-created thread. While the acknowledged turn was in progress, only the verified test PowerShell host and its CLI child tree were terminated. The separately started shared server remained healthy, and a new authenticated client retrieved the exact follow-up turn as completed with one successful command. This validates abrupt launcher-host closure; it does not yet validate the HTTP bridge or EasyTier.
+
+One automated input attempt in the Codex TUI was not accepted during this session; a separate real native console diagnostic received input correctly through both direct and wrapped launch. The follow-up lifetime test therefore used RPC, as stated above. Broader TUI keyboard interaction remains a separate manual check.
+
 ## Protocol findings
 
 - Initialize each connection and send `initialized` before application requests.

@@ -25,6 +25,7 @@
 node_modules/
 dist/
 coverage/
+testResults.xml
 .build/
 DerivedData/
 build/
