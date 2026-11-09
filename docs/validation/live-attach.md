@@ -32,6 +32,16 @@ One automated input attempt in the Codex TUI was not accepted during this sessio
 - Rejoin loaded threads with only their ID and pagination options. Do not override their approval or sandbox policy.
 - Closing a transport does not establish whether a write succeeded. Observe server state; never blindly replay a write.
 
+## Additional W4 gate: incomplete live-stream prefix
+
+**FAIL for immediate complete streaming recovery.** A second connection joined after the third delta of a controlled 400-line response. Both paged full-item resume and legacy full-history resume omitted the message currently being streamed. In the full-history trial, the original client received 1,999 deltas and the late client 1,985. The canonical message had 13,199 characters; the late stream assembled only 13,101, with the same message ID. A further paged trial reproduced these counts.
+
+**PASS for completed-message replacement.** In the further paged trial, the late client received the full `item/completed` message and it exactly matched the original client's canonical message. This supports explicitly showing a partial prefix until a complete item arrives; it does not make the original immediate-recovery requirement pass.
+
+The [proposed behavior amendment](../superpowers/specs/2026-11-08-live-stream-recovery-amendment.md) is awaiting confirmation. W4 storage/sync and subsequent product-control work remain gated. The synchronous RPC response boundary itself passed its regression test; it cannot recover text absent from the upstream snapshot.
+
+Reproduce using `bridge/scripts/probe-snapshot-race.ts` against an idle isolated thread. Create `probe-stream.json` in its temporary project containing `{"threadId":"<test-thread>","allowTestTurn":true}`. Supply `--url`, `--token-file`, `--project`, `--thread` and `--mode paged` or `--mode full`. The probe starts one text-generation turn, records counts without message bodies or tokens, and returns exit code 1 when immediate prefix recovery fails. It is intentionally excluded from automatic tests and never runs against a user thread by default.
+
 ## Reproduction
 
 Start an authenticated loopback `codex app-server` in a separate process and connect an actual `codex --remote` CLI. In a new empty project, request only a command writing `probe-ok` to `marker.txt` then waiting 25 seconds, with read-only sandbox and on-request approval. Capture the CLI thread/turn, its PID, and the exact pending approval command before closing that controlled CLI.

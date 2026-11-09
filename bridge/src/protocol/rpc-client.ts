@@ -6,9 +6,10 @@ const READ_METHODS = new Set([
   'thread/list', 'thread/read', 'thread/turns/list', 'thread/items/list',
   'thread/loaded/list', 'model/list',
 ]);
-type Waiter = { resolve: (value: Json) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
+type Waiter = { resolve: (value: Json) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; apply?: (value:Json)=>void };
 export interface RpcClient {
   request(method: string, params: Json): Promise<Json>;
+  requestAtBarrier(method:string,params:Json,apply:(value:Json)=>void):Promise<Json>;
   respond(id: string | number, result: Json): void;
   onEvent(handler: (message: Json) => void): () => void;
   close(): Promise<void>;
@@ -63,7 +64,13 @@ class WebSocketRpcClient implements RpcClient {
             typeof error.message === 'string' ? error.message : 'RPC request failed',
           ));
         } else if ('result' in record) {
-          waiter.resolve(record.result as Json);
+          try {
+            waiter.apply?.(record.result as Json);
+            waiter.resolve(record.result as Json);
+          } catch(error) {
+            waiter.reject(error instanceof Error ? error : new Error('RPC snapshot application failed'));
+            this.fail('RPC snapshot application failed');
+          }
         } else {
           waiter.reject(new RpcTransportError('RPC response has no result'));
         }
@@ -97,6 +104,10 @@ class WebSocketRpcClient implements RpcClient {
 
   respond(id: string | number, result: Json): void { this.send({ id, result }); }
 
+  requestAtBarrier(method:string,params:Json,apply:(value:Json)=>void):Promise<Json> {
+    return this.sendRequest(method,params,apply);
+  }
+
   onEvent(handler: (message: Json) => void): () => void {
     this.handlers.add(handler);
     const queued = this.backlog;
@@ -115,7 +126,7 @@ class WebSocketRpcClient implements RpcClient {
     });
   }
 
-  private sendRequest(method: string, params: Json): Promise<Json> {
+  private sendRequest(method: string, params: Json, apply?: (value:Json)=>void): Promise<Json> {
     return new Promise((resolve, reject) => {
       if (this.failed || this.socket.readyState !== WebSocket.OPEN) {
         reject(new RpcTransportError('RPC connection is unavailable')); return;
@@ -125,7 +136,7 @@ class WebSocketRpcClient implements RpcClient {
         this.pending.delete(id);
         reject(new RpcTransportError('RPC response timed out; outcome requires reconciliation'));
       }, 30_000);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, apply });
       try { this.send({ id, method, params }); }
       catch {
         clearTimeout(timer);

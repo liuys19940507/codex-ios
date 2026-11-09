@@ -4,6 +4,23 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { connectRpc } from '../src/protocol/rpc-client.js';
 import { fakeServer, handshake, type Message } from './support/fake-server.js';
 
+test('snapshot_barrier: applies a response synchronously before a following delta frame', async t => {
+  const server=await fakeServer((socket,msg)=>{
+    if(handshake(socket,msg)||!msg.method||msg.method==='initialized')return;
+    socket.send(JSON.stringify({method:'delta',params:{text:'already-in-snapshot'}}));
+    socket.send(JSON.stringify({id:msg.id,result:{text:'seed'}}));
+    socket.send(JSON.stringify({method:'delta',params:{text:'-tail'}}));
+  });
+  t.after(()=>server.close());
+  const client=await connectRpc(server.url,'test');
+  t.after(()=>client.close());
+  let text='';
+  client.onEvent(raw=>{const msg=raw as {params:{text:string}};text+=msg.params.text;});
+  await client.requestAtBarrier('thread/resume',{threadId:'t'},raw=>{text=(raw as {text:string}).text;});
+  await delay(20);
+  assert.equal(text,'seed-tail');
+});
+
 test('handshake_once: authenticates before any application request', async t => {
   const methods: string[] = [];
   const server = await fakeServer((socket, msg) => {
