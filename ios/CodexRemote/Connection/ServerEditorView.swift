@@ -32,7 +32,7 @@ struct ServerEditorView: View {
             }
             Section {
                 Text("手机与电脑需连接同一个 EasyTier 网络。服务地址和配对令牌由 Windows 桥接服务提供。")
-                if server != nil { Text("令牌留空可保留原值；修改服务地址时需要重新填写令牌。") }
+                if server != nil { Text("已保存的令牌不会回显；留空会保留原值。修改服务地址时需要重新填写令牌。") }
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -96,18 +96,26 @@ struct ConnectionView: View {
                                     Text(server.baseURL.absoluteString).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                                 }
                                 Spacer()
-                                Button { editing = server } label: { Image(systemName: "pencil") }
+                                Button { editing = server } label: {
+                                    Image(systemName: "pencil").frame(width: 44, height: 44).contentShape(Rectangle())
+                                }
+                                    .buttonStyle(.borderless)
                                     .accessibilityLabel("编辑 \(server.name)")
                             }
                             Button {
                                 Task { await connection.connect(serverID: server.id) }
                             } label: {
-                                if connection.activeServerID == server.id && connection.status == .connecting {
-                                    HStack { ProgressView(); Text("正在连接…") }
-                                } else {
-                                    Text(connection.activeServerID == server.id && connection.status == .connected ? "重新连接" : "连接")
+                                HStack {
+                                    if connection.activeServerID == server.id && connection.status == .connecting {
+                                        ProgressView(); Text("正在连接…")
+                                    } else {
+                                        Text(connection.activeServerID == server.id && connection.status == .connected ? "重新连接" : "连接")
+                                    }
+                                    Spacer()
                                 }
+                                .frame(minHeight: 44).contentShape(Rectangle())
                             }
+                            .buttonStyle(.borderless)
                             .disabled(connection.status == .connecting)
                         }
                         .padding(.vertical, 4)
