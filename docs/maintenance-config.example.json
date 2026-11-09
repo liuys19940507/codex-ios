@@ -1,0 +1,6 @@
+{
+  "daemonExe": "C:/Users/YOUR_NAME/AppData/Local/Sideloadly/sideloadlydaemon.exe",
+  "daemonSha256": "REPLACE_WITH_THE_SHA256_OF_THE_VERIFIED_INSTALLED_EXECUTABLE",
+  "logDir": "C:/ProgramData/CodexRemote/Maintenance/logs",
+  "evidence": null
+}

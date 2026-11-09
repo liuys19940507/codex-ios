@@ -32,4 +32,4 @@ jobs:
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
           Import-Module Pester -RequiredVersion 5.7.1 -Force
-          Invoke-Pester -CI -Path ../scripts/windows/tests/Launcher.Tests.ps1
+          Invoke-Pester -CI -Path ../scripts/windows/tests
