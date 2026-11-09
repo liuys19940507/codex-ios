@@ -28,7 +28,7 @@ async function fixture(t:TestContext) {
   });
   const rpc=await connectRpc(server.url,'test'),store=openStore(join(dir,'state.sqlite')),sync=createSync(store,rpc);
   t.after(async()=>{sync.close();await rpc.close();await server.close();store.close();await rm(dir,{recursive:true,force:true});});
-  const queries=createQueries({rpc,store,sync,projects});return {queries,calls,store};
+  const queries=createQueries({rpc,store,sync,projects});return {queries,calls,store,parent};
 }
 
 test('project_scoped_listing_filters_foreign_threads_and_keeps_child_parent_identity',async t=>{
@@ -80,4 +80,19 @@ test('foreign_thread_snapshot_is_rejected_without_resuming_it',async t=>{
 test('model_choices_use_real_request_ids_and_server_reasoning_choices',async t=>{
   const f=await fixture(t);
   assert.deepEqual(await f.queries.queryModels(),[{id:'available-model',name:'Available',reasoning:['medium']}]);
+});
+
+test('cached_history_title_refreshes_without_discarding_observed_output_or_turn',async t=>{
+  const f=await fixture(t);
+  await f.queries.querySnapshot('parent');
+  const cached=f.store.snapshot('parent');
+  cached.items[cached.items.length-1]!.text='recorded partial prefix';
+  cached.thread.activeTurnId='controlled-live-turn';
+  f.store.atomic(()=>f.store.putSnapshot(cached));
+  f.parent.name='Renamed history';
+  const refreshed=await f.queries.querySnapshot('parent');
+  assert.equal(refreshed.thread.title,'Renamed history');
+  assert.equal(refreshed.thread.activeTurnId,'controlled-live-turn');
+  assert.equal(refreshed.items.at(-1)!.text,'recorded partial prefix');
+  assert.equal(f.calls.some(c=>c.method==='thread/resume'),false);
 });

@@ -34,6 +34,18 @@ export class SyncService {
   onEvent(handler:(event:Envelope)=>void):()=>void {this.listeners.add(handler);return ()=>this.listeners.delete(handler);}
   replay(cursor:Cursor):Envelope[]|'resync_required' {return this.store.replay(cursor);}
   close():void {this.unsubscribe();this.listeners.clear();}
+  refreshMetadata(raw:unknown):void {
+    const native=object(raw);
+    if(typeof native.id!=='string'||!this.store.has(native.id))return;
+    const fresh=summary(native,this.store),snapshot=this.store.snapshot(native.id);
+    const title=('name' in native||'preview' in native)?fresh.title:snapshot.thread.title;
+    const parentId='parentThreadId' in native?fresh.parentId:snapshot.thread.parentId;
+    if(title===snapshot.thread.title&&parentId===snapshot.thread.parentId)return;
+    snapshot.thread.title=title;snapshot.thread.parentId=parentId;
+    let envelope:Envelope;
+    this.store.atomic(()=>{this.store.putSnapshot(snapshot);envelope=this.store.append(native.id,'thread/upsert',snapshot.thread as unknown as Json);});
+    for(const listener of this.listeners)listener(envelope!);
+  }
   claimPending(id:string) {
     const stored=this.store.pending(id);
     if(!stored||stored.connectionId!==this.connectionId||stored.record.state!=='pending')throw new ApiError(409,'request_expired','This request is no longer pending');

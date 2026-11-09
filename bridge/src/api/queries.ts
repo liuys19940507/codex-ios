@@ -22,7 +22,12 @@ export function createQueries(context:QueryContext) {
   const {rpc,store,sync,projects}=context;store.setProjects(projects);
   async function authorizeThread(threadId:string):Promise<Record<string,any>> {
     if(!threadId||threadId.length>256)throw new ApiError(400,'invalid_request','Invalid thread id');
-    const response=object(await rpc.request('thread/read',{threadId,includeTurns:false})),thread=object(response.thread);
+    const response=object(await rpc.requestAtBarrier('thread/read',{threadId,includeTurns:false},value=>{
+      const thread=object(object(value).thread);
+      // Apply metadata at the read response boundary, before a following live
+      // rename event. Scope failures are rejected below without failing RPC.
+      if(thread.id===threadId&&store.project(String(thread.cwd??'')))sync.refreshMetadata(thread);
+    })),thread=object(response.thread);
     if(thread.id!==threadId)throw new ApiError(503,'upstream_invalid','Thread identity mismatch');
     summary(thread,store);return thread;
   }
