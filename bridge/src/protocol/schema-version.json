@@ -1,0 +1,1 @@
+{ "codexVersion": "0.167.0", "experimental": true, "command": "codex app-server generate-ts --experimental --out src/protocol/generated" }
