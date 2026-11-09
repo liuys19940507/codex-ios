@@ -56,3 +56,16 @@ npx tsx scripts/probe-live-attach.ts --url ws://127.0.0.1:18390 --token-file <lo
 ```
 
 The probe sends an approval for the exact recorded command. Run it only against the isolated test. It does not create tasks or stop any process itself. Unobserved cases remain NOT RUN, and failed core checks return exit code 1.
+
+
+## 已确认修订后的同步实现验证
+
+用户已确认“部分输出，消息结束后补齐”的修订。2026-11-09 UTC，使用原生 Codex 0.167.0、独立临时项目和自有 loopback app-server，对新 SQLite/同步适配器执行真实测试：
+
+- 同一个 thread/turn 中途接入：PASS。
+- 接入后收到部分输出并标记 prefixComplete=false：PASS。
+- 原客户端观察到 900 个增量；完整助手消息为 6,599 个字符。
+- 新同步适配器收到结束事件后，按同一个 item ID 替换为完整内容，逐字符与原客户端一致：PASS。
+- 受控回合完成后才关闭两个测试客户端并停止本次自有 app-server。
+
+这验证了已批准的修订行为，不表示未完成消息此前的前文能立即恢复，也不表示已完成 iPhone 控制或真机安装。取消且没有完整结束内容时继续显示不完整提示。
