@@ -1,4 +1,5 @@
 import XCTest
+import Security
 @testable import CodexRemote
 
 final class ConnectionTests: XCTestCase {
@@ -22,7 +23,7 @@ final class ConnectionTests: XCTestCase {
     }
 
     func testCredentialNamespacesAreIndependent() throws {
-        let credentials = CredentialStore(service: "com.liuys.codexremote.tests.\(UUID().uuidString)")
+        let credentials = CredentialStore(service: "com.liuys.codexremote.tests.\(UUID().uuidString)", backend: MemoryKeychain())
         let first = UUID(), other = UUID()
         defer { try? credentials.delete(serverID: first); try? credentials.delete(serverID: other) }
         try credentials.save(token: "test-token", serverID: first)
@@ -34,5 +35,41 @@ final class ConnectionTests: XCTestCase {
         try credentials.delete(serverID: first)
         XCTAssertNil(try credentials.load(serverID: first))
         XCTAssertEqual(try credentials.load(serverID: other), "other-token")
+    }
+
+    func testKeychainFailureIsReportedWithoutPlaintextFallback() throws {
+        let backend = MemoryKeychain()
+        backend.failure = errSecMissingEntitlement
+        let store = CredentialStore(backend: backend)
+        XCTAssertThrowsError(try store.save(token: "test-token", serverID: UUID()))
+        XCTAssertTrue(backend.values.isEmpty)
+    }
+}
+
+private final class MemoryKeychain: KeychainBackend {
+    var values: [String: Data] = [:]
+    var failure: OSStatus?
+    private func key(_ query: [String: Any]) -> String {
+        "\(query[kSecAttrService as String]!)|\(query[kSecAttrAccount as String]!)"
+    }
+    func update(_ query: [String: Any], values update: [String: Any]) -> OSStatus {
+        if let failure { return failure }
+        guard values[key(query)] != nil else { return errSecItemNotFound }
+        values[key(query)] = update[kSecValueData as String] as? Data
+        return errSecSuccess
+    }
+    func add(_ fields: [String: Any]) -> OSStatus {
+        if let failure { return failure }
+        values[key(fields)] = fields[kSecValueData as String] as? Data
+        return errSecSuccess
+    }
+    func read(_ query: [String: Any]) -> (OSStatus, Data?) {
+        if let failure { return (failure, nil) }
+        guard let data = values[key(query)] else { return (errSecItemNotFound, nil) }
+        return (errSecSuccess, data)
+    }
+    func delete(_ query: [String: Any]) -> OSStatus {
+        if let failure { return failure }
+        return values.removeValue(forKey: key(query)) == nil ? errSecItemNotFound : errSecSuccess
     }
 }
