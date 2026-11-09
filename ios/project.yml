@@ -1,0 +1,56 @@
+name: CodexRemote
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    iOS: '16.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+    CODE_SIGNING_ALLOWED: NO
+    MARKETING_VERSION: '0.1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  CodexRemote:
+    type: application
+    platform: iOS
+    sources:
+      - path: CodexRemote
+        excludes: [Resources/Info.plist]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.liuys.codexremote
+        PRODUCT_NAME: CodexRemote
+        INFOPLIST_FILE: CodexRemote/Resources/Info.plist
+        TARGETED_DEVICE_FAMILY: '1,2'
+  CodexRemoteTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CodexRemoteTests
+      - path: ../contracts/fixtures/info.json
+        buildPhase: resources
+    dependencies:
+      - target: CodexRemote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.liuys.codexremote.tests
+        GENERATE_INFOPLIST_FILE: YES
+  CodexRemoteUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [CodexRemoteUITests]
+    dependencies:
+      - target: CodexRemote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.liuys.codexremote.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  CodexRemote:
+    build:
+      targets:
+        CodexRemote: all
+    test:
+      targets: [CodexRemoteTests, CodexRemoteUITests]
+      gatherCoverageData: true

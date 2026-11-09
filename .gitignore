@@ -31,6 +31,8 @@ build/
 *.ipa
 *.xcarchive/
 *.xcuserstate
+*.xcresult/
+*.xcodeproj/
 xcuserdata/
 
 # Editor and OS files

@@ -1,0 +1,6 @@
+{
+  "apiVersion": 1,
+  "serverId": "fixture-server",
+  "codexVersion": "0.167.0",
+  "features": {"steer": false, "queue": false, "approvals": true, "childThreads": false}
+}

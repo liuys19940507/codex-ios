@@ -1,0 +1,47 @@
+name: iOS
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - 'scripts/ci/**'
+      - 'contracts/fixtures/**'
+      - '.github/workflows/ios.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: bash scripts/ci/install-xcodegen.sh
+      - run: bash scripts/ci/test-ios.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ios-tests-${{ github.sha }}
+          path: build/CodexRemote.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
+  package:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: bash scripts/ci/install-xcodegen.sh
+      - run: bash scripts/ci/package-ios.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: CodexRemote-unsigned-${{ github.sha }}
+          path: |
+            build/CodexRemote-unsigned.ipa
+            build/CodexRemote-unsigned.ipa.sha256
+            build/commit.txt
+          if-no-files-found: error
+          retention-days: 14
