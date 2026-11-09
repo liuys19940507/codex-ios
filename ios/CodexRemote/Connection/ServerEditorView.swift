@@ -13,7 +13,7 @@ struct ServerEditorView: View {
     init(server: ServerConfiguration? = nil) {
         self.server = server
         _name = State(initialValue: server?.name ?? "Windows")
-        _address = State(initialValue: server?.baseURL.absoluteString ?? "")
+        _address = State(initialValue: server?.baseURL.absoluteString ?? "http://10.147.21.2:8391")
     }
 
     var body: some View {
