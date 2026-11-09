@@ -11,6 +11,11 @@ Describe 'PowerShell launcher' {
     }
 
     It 'captures literal arguments in an actual native process and restores the environment' {
+        $preferredNode = @(Get-Command node.exe -CommandType Application)[0].Source
+        Mock Get-Command -ModuleName CodexRemote.Launcher -ParameterFilter { $Name -eq 'node.exe' } -MockWith {
+            [pscustomobject]@{Source=$preferredNode}
+            [pscustomobject]@{Source='C:\unused-second-node\node.exe'}
+        }
         $captureExe = Join-Path $TestDrive 'codex.exe'
         Add-Type -TypeDefinition @'
 using System;

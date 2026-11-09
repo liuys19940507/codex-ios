@@ -8,7 +8,7 @@ function Get-CodexRemoteArguments {
 }
 
 function Invoke-CodexRemoteClient {
-    param([string]$CodexExe, [string]$RemoteUrl, [string]$TokenFile, [string]$ProjectPath, [string]$Prompt, [string[]]$CliArguments = @(), [string]$NodeExe = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source)
+    param([string]$CodexExe, [string]$RemoteUrl, [string]$TokenFile, [string]$ProjectPath, [string]$Prompt, [string[]]$CliArguments = @(), [string]$NodeExe = (@(Get-Command node.exe -CommandType Application -ErrorAction Stop)[0].Source))
     $privateDir = Join-Path ([IO.Path]::GetTempPath()) ('codex-launch-' + [guid]::NewGuid().ToString('N'))
     $requestFile = Join-Path $privateDir 'request.json'
     [IO.Directory]::CreateDirectory($privateDir) | Out-Null

@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$ConfigPath,
     [Parameter(Mandatory=$true)][string]$InstanceId,
-    [string]$NodeExe = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+    [string]$NodeExe = (@(Get-Command node.exe -CommandType Application -ErrorAction Stop)[0].Source)
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))

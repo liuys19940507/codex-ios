@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory=$true)][string]$ProjectId,
     [string]$Prompt,
     [string[]]$CodexArguments = @(),
-    [string]$NodeExe = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+    [string]$NodeExe = (@(Get-Command node.exe -CommandType Application -ErrorAction Stop)[0].Source)
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'CodexRemote.Launcher.psm1') -Force
