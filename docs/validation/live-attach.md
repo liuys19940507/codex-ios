@@ -22,6 +22,8 @@ The implemented runtime started and reused the same owned native app-server inst
 
 A real PowerShell launcher connected a CLI and created a controlled thread. Its first 45-second sleep completed. A follow-up 60-second sleep turn was started by RPC in that same CLI-created thread. While the acknowledged turn was in progress, only the verified test PowerShell host and its CLI child tree were terminated. The separately started shared server remained healthy, and a new authenticated client retrieved the exact follow-up turn as completed with one successful command. This validates abrupt launcher-host closure; it does not yet validate the HTTP bridge or EasyTier.
 
+The [staged implementation review](implementation-review.md) subsequently fixed three recovery defects with RED-to-GREEN regressions. The current suite is 21/21 Node tests plus 2/2 PowerShell tests; the earlier case counts above describe the tests at their original checkpoints.
+
 One automated input attempt in the Codex TUI was not accepted during this session; a separate real native console diagnostic received input correctly through both direct and wrapped launch. The follow-up lifetime test therefore used RPC, as stated above. Broader TUI keyboard interaction remains a separate manual check.
 
 ## Protocol findings

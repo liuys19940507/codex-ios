@@ -3,6 +3,9 @@ import test, { type TestContext } from 'node:test';
 import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import fsPromises from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
+import {setTimeout as delay} from 'node:timers/promises';
 import { createServiceManager, type ServiceHost, type ProcessIdentity } from '../src/runtime/service.js';
 import type { RuntimeConfig } from '../src/runtime/config.js';
 
@@ -28,6 +31,7 @@ async function fixture(t:TestContext) {
     },
     identify:async(pid)=>pid===901 ? processInfo:null,
     healthy:async()=>processInfo!==null,
+    listThreads:async()=>({data:[],nextCursor:null}),
     stop:async()=>{stopCount++;processInfo=null;occupied=false;},
   };
   return {config,manager:createServiceManager(host),host,captured,stopCount:()=>stopCount,occupy:()=>{occupied=true;},replaceProcess:()=>{processInfo={pid:901,exe:codexExe,createdAt:'different incarnation',commandLine:'other'};}};
@@ -81,4 +85,58 @@ test('recycled_pid_cannot_be_reused_or_stopped',async t=>{
   await assert.rejects(f.manager.ensureService(f.config),/identity/i);
   await assert.rejects(f.manager.stopService(f.config,service.instanceId),/identity/i);
   assert.equal(f.stopCount(),0);
+});
+
+test('explicit_stop_still_verifies_ownership_when_rpc_is_unhealthy',async t=>{
+  const f=await fixture(t);
+  const service=await f.manager.ensureService(f.config);
+  f.host.healthy=async()=>false;
+  f.host.listThreads=async()=>{throw new Error('RPC unavailable');};
+  await assert.rejects(f.manager.ensureService(f.config),/not healthy/i);
+  const status=await f.manager.inspectService(f.config);
+  assert.equal(status?.info.instanceId,service.instanceId);
+  const listing=await f.manager.getStatus(f.config);
+  assert.equal(listing.service?.instanceId,service.instanceId);
+  assert.equal(listing.tasksAvailable,false);
+  assert.equal(listing.threads,null);
+  await assert.rejects(f.manager.stopService(f.config,'wrong-instance'),/instance/i);
+  assert.equal(f.stopCount(),0);
+  await f.manager.stopService(f.config,service.instanceId);
+  assert.equal(f.stopCount(),1);
+});
+
+test('concurrent_stale_recovery_cannot_unlink_a_replacement_owners_lock',async t=>{
+  const f=await fixture(t);
+  const lock=join(f.config.stateDir,'start.lock');
+  await writeFile(lock,JSON.stringify({pid:2147483647,nonce:'dead-owner'}));
+  const originalRead=fsPromises.readFile,originalUnlink=fsPromises.unlink;
+  let releaseReads!:()=>void,entered!:()=>void;
+  const bothRead=new Promise<void>(resolve=>{releaseReads=resolve;});
+  const firstEntry=new Promise<void>(resolve=>{entered=resolve;});
+  let staleReads=0,unlinks=0,inside=0,maxInside=0;
+  fsPromises.readFile=(async(...args:unknown[])=>{
+    const result=await Reflect.apply(originalRead,fsPromises,args) as string|Buffer;
+    if(String(args[0])===lock&&String(result).includes('dead-owner')) {
+      staleReads++;if(staleReads===2)releaseReads();
+      await Promise.race([bothRead,delay(150)]);
+    }
+    return result;
+  }) as typeof originalRead;
+  fsPromises.unlink=(async(...args:unknown[])=>{
+    if(String(args[0])===lock&&++unlinks===2)await Promise.race([firstEntry,delay(300)]);
+    return await Reflect.apply(originalUnlink,fsPromises,args);
+  }) as typeof originalUnlink;
+  syncBuiltinESMExports();
+  f.host.version=async()=>{
+    inside++;maxInside=Math.max(maxInside,inside);entered();
+    await delay(250);inside--;return 'codex-cli 0.167.0';
+  };
+  try {
+    const results=await Promise.allSettled([f.manager.ensureService(f.config),createServiceManager(f.host).ensureService(f.config)]);
+    assert.equal(maxInside,1,'stale waiters must never enter concurrently');
+    assert.ok(results.every(r=>r.status==='fulfilled'));
+    assert.equal(f.captured.length,1);
+  } finally {
+    fsPromises.readFile=originalRead;fsPromises.unlink=originalUnlink;syncBuiltinESMExports();
+  }
 });

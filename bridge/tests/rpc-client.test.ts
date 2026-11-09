@@ -21,6 +21,28 @@ test('snapshot_barrier: applies a response synchronously before a following delt
   assert.equal(text,'seed-tail');
 });
 
+test('failed_snapshot_cannot_apply_buffered_delta', async t => {
+  const server=await fakeServer((socket,msg)=>{
+    if(handshake(socket,msg)||!msg.method||msg.method==='initialized')return;
+    socket.send(JSON.stringify({id:msg.id,result:{text:'inconsistent'}}));
+    socket.send(JSON.stringify({method:'item/agentMessage/delta',params:{delta:'must not apply'}}));
+  });
+  t.after(()=>server.close());
+  const client=await connectRpc(server.url,'test');t.after(()=>client.close());
+  let applied=0;client.onEvent(()=>{applied++;});
+  await assert.rejects(client.requestAtBarrier('thread/resume',{threadId:'controlled'},()=>{throw new Error('Cannot install snapshot');}),/Cannot install snapshot/);
+  await delay(20);
+  assert.equal(applied,0);
+});
+
+test('abort_can_end_an_unresponsive_initialization_for_best_effort_status',async t=>{
+  const server=await fakeServer(()=>{});t.after(()=>server.close());
+  const controller=new AbortController();
+  const outcome=connectRpc(server.url,'test',{signal:controller.signal}).then(client=>{void client.close();return 'connected';},()=> 'aborted');
+  controller.abort();
+  assert.equal(await Promise.race([outcome,delay(300).then(()=> 'timedout')]),'aborted');
+});
+
 test('handshake_once: authenticates before any application request', async t => {
   const methods: string[] = [];
   const server = await fakeServer((socket, msg) => {

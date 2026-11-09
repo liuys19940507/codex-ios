@@ -13,7 +13,11 @@ $statusJSON = & $NodeExe $tsx $control --config $configFile --status
 if ($LASTEXITCODE -ne 0) { throw 'Cannot verify owned service' }
 $status = $statusJSON | ConvertFrom-Json
 if (-not $status.service -or $status.service.instanceId -ne $InstanceId) { throw 'Instance ID no longer matches; nothing stopped' }
-Write-Host "Stopping this shared service affects its loaded tasks: $($status.threads | ConvertTo-Json -Compress -Depth 4)"
+if ($status.tasksAvailable) {
+    Write-Host "Stopping this shared service affects its loaded tasks: $($status.threads | ConvertTo-Json -Compress -Depth 4)"
+} else {
+    Write-Warning 'Task listing is unavailable. Stopping this verified owned instance will interrupt any remaining tasks.'
+}
 if ($PSCmdlet.ShouldProcess("shared instance $InstanceId", 'Stop Codex and its loaded tasks')) {
     & $NodeExe $tsx $control --config $configFile --stop $InstanceId
     if ($LASTEXITCODE -ne 0) { throw 'Owned service stop failed' }

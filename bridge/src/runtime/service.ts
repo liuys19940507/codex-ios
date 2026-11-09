@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createConnection } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectRpc } from '../protocol/rpc-client.js';
+import type { Json } from '../api/contracts.js';
 import { validateConfig, type RuntimeConfig } from './config.js';
 
 export interface ServiceInfo {instanceId:string;pid:number;codexUrl:string;bridgeUrl:string}
@@ -18,6 +19,7 @@ export interface ServiceHost {
   spawn(exe:string,args:string[],stateDir:string):Promise<ProcessIdentity>;
   identify(pid:number):Promise<ProcessIdentity|null>;
   healthy(url:string,token:string):Promise<boolean>;
+  listThreads(url:string,token:string):Promise<Json>;
   stop(pid:number):Promise<void>;
 }
 interface OwnedService {info:ServiceInfo;process:ProcessIdentity;codexExe:string;codexPort:number}
@@ -51,10 +53,38 @@ const nativeHost:ServiceHost={
   },
   identify,
   healthy:async(url,token)=>{try{const rpc=await connectRpc(url,token);await rpc.close();return true;}catch{return false;}},
+  listThreads:async(url,token)=>{
+    const rpc=await connectRpc(url,token,{signal:AbortSignal.timeout(2000)});
+    try{return await rpc.request('thread/loaded/list',{});}finally{await rpc.close();}
+  },
   stop:async pid=>{process.kill(pid);},
 };
 
 export function createServiceManager(host:ServiceHost=nativeHost) {
+  async function reclaimStaleLock(file:string):Promise<boolean> {
+    // Serialize stale-owner decisions separately. A waiter must reread ownership
+    // while holding this guard; otherwise it can unlink a replacement lock.
+    const guard=file+'.recovery';
+    let handle;
+    try{handle=await open(guard,'wx',0o600);}catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')return false;throw error;}
+    try {
+      await handle.writeFile(JSON.stringify({pid:process.pid,nonce:randomUUID()}));
+      let owner:{pid:number};
+      try{owner=JSON.parse(await readFile(file,'utf8')) as {pid:number};}
+      catch(error){if(isMissing(error)||error instanceof SyntaxError)return false;throw error;}
+      if(!Number.isSafeInteger(owner.pid)||owner.pid<=0)throw new Error('Invalid startup lock owner');
+      try{process.kill(owner.pid,0);return false;}
+      catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}
+      await unlink(file);
+      return true;
+    } finally {
+      await handle.close();
+      // Only the holder removes this guard. Abandoned guards are deliberately
+      // left for inspection instead of recursively attempting unsafe recovery.
+      await unlink(guard);
+    }
+  }
+
   async function lock(config:RuntimeConfig):Promise<()=>Promise<void>> {
     const file=paths(config).lock;
     const nonce=randomUUID();
@@ -70,12 +100,8 @@ export function createServiceManager(host:ServiceHost=nativeHost) {
         };
       } catch(error) {
         if((error as NodeJS.ErrnoException).code!=='EEXIST') throw error;
-        try {
-          const owner=JSON.parse(await readFile(file,'utf8')) as {pid:number};
-          if(!Number.isSafeInteger(owner.pid)||owner.pid<=0) throw new Error('Invalid startup lock owner');
-          try{process.kill(owner.pid,0);}catch(e){if((e as NodeJS.ErrnoException).code==='ESRCH'){await unlink(file);continue;}throw e;}
-        } catch(e) { if(!(e instanceof SyntaxError)&&!isMissing(e)) throw e; }
-        if(Date.now()>deadline) throw new Error('Service startup lock is busy; inspect its owner');
+        if(await reclaimStaleLock(file))continue;
+        if(Date.now()>deadline) throw new Error('Service startup lock is busy; inspect start.lock and start.lock.recovery owners');
         await delay(25);
       }
     }
@@ -89,8 +115,6 @@ export function createServiceManager(host:ServiceHost=nativeHost) {
       const current=await host.identify(saved.info.pid);
       if(!current) return null;
       if(!samePath(current.exe,saved.process.exe)||current.createdAt!==saved.process.createdAt||current.commandLine!==saved.process.commandLine) throw new Error('Service process identity mismatch');
-      const token=(await readFile(paths(config).token,'utf8')).trim();
-      if(!/^[0-9a-f]{64}$/.test(token)||!await host.healthy(saved.info.codexUrl,token)) throw new Error('Owned service is not healthy; not replacing or killing it');
       return saved;
     } catch(e) {if(isMissing(e)) return null;throw e;}
   }
@@ -106,7 +130,11 @@ export function createServiceManager(host:ServiceHost=nativeHost) {
     try {
       if((await host.version(config.codexExe)).trim()!=='codex-cli 0.167.0') throw new Error('Codex 0.167.0 native executable is required');
       const previous=await readOwned(config);
-      if(previous) return previous.info;
+      if(previous) {
+        const token=(await readFile(paths(config).token,'utf8')).trim();
+        if(!/^[0-9a-f]{64}$/.test(token)||!await host.healthy(previous.info.codexUrl,token))throw new Error('Owned service is not healthy; not replacing or killing it');
+        return previous.info;
+      }
       if(await host.portOpen(config.codexPort)) throw new Error('Codex port occupied by an unowned process; choose another port');
       const token=randomBytes(32).toString('hex');
       await writeFile(paths(config).token,token,{mode:0o600});
@@ -137,10 +165,22 @@ export function createServiceManager(host:ServiceHost=nativeHost) {
       await unlink(paths(config).record);
     } finally{await release();}
   }
-  return {ensureService,stopService,inspectService:readOwned};
+  async function getStatus(config:RuntimeConfig) {
+    validateConfig(config);
+    const owned=await readOwned(config);
+    if(!owned)return {service:null,threads:null,tasksAvailable:false};
+    try {
+      const token=(await readFile(paths(config).token,'utf8')).trim();
+      if(!/^[0-9a-f]{64}$/.test(token))throw new Error('Capability token unavailable');
+      const threads=await host.listThreads(owned.info.codexUrl,token);
+      return {service:owned.info,threads,tasksAvailable:true};
+    } catch {return {service:owned.info,threads:null,tasksAvailable:false};}
+  }
+  return {ensureService,stopService,inspectService:readOwned,getStatus};
 }
 
 const manager=createServiceManager();
 export const ensureService=manager.ensureService;
 export const stopService=manager.stopService;
 export const inspectService=manager.inspectService;
+export const getServiceStatus=manager.getStatus;

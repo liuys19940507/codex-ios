@@ -35,6 +35,7 @@ class WebSocketRpcClient implements RpcClient {
 
   constructor(private readonly socket: WebSocket) {
     socket.on('message', (data, binary) => {
+      if (this.failed) return;
       if (binary) { this.fail('Unexpected binary RPC message'); return; }
       try {
         const message: unknown = JSON.parse(data.toString());
@@ -165,7 +166,8 @@ class WebSocketRpcClient implements RpcClient {
   }
 }
 
-export async function connectRpc(url: string, token: string): Promise<RpcClient> {
+export async function connectRpc(url: string, token: string, options:{signal?:AbortSignal}={}): Promise<RpcClient> {
+  if(options.signal?.aborted)throw new RpcTransportError('RPC connection aborted');
   const endpoint = new URL(url);
   if (!['ws:', 'wss:'].includes(endpoint.protocol) || endpoint.username || endpoint.password)
     throw new Error('RPC endpoint must be a WebSocket URL without user credentials');
@@ -173,6 +175,9 @@ export async function connectRpc(url: string, token: string): Promise<RpcClient>
     headers: { Authorization: 'Bearer ' + token }, handshakeTimeout: 10_000,
   });
   const client = new WebSocketRpcClient(socket);
+  const abort=()=>{void client.close();};
+  options.signal?.addEventListener('abort',abort,{once:true});
+  socket.once('close',()=>options.signal?.removeEventListener('abort',abort));
   try {
     await new Promise<void>((resolve, reject) => {
       socket.once('open', () => resolve());
