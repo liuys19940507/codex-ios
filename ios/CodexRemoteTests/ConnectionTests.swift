@@ -46,7 +46,7 @@ final class ConnectionTests: XCTestCase {
     }
 }
 
-private final class MemoryKeychain: KeychainBackend {
+final class MemoryKeychain: KeychainBackend {
     var values: [String: Data] = [:]
     var failure: OSStatus?
     private func key(_ query: [String: Any]) -> String {
