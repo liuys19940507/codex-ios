@@ -1,0 +1,39 @@
+# Local agent planning notes
+/task_plan.md
+/findings.md
+/progress.md
+/.planning/
+/.plan-attestation
+
+# Local configuration and signing material
+.env
+.env.*
+!.env.example
+.local/
+.secrets/
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+*.key
+*.pem
+*.cer
+
+# Build output and dependencies
+node_modules/
+dist/
+coverage/
+.build/
+DerivedData/
+build/
+*.ipa
+*.xcarchive/
+*.xcuserstate
+xcuserdata/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
