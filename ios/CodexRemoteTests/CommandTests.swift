@@ -113,6 +113,37 @@ final class CommandTests: XCTestCase {
     }
 
     @MainActor
+    func testAcknowledgementFromOldComposerCannotEraseANewerPersistedDraft() async throws {
+        let f = try fixture(behavior: .held), drafts = DraftStore(root: f.root.appendingPathComponent("drafts"))
+        let composer = ComposerModel(serverID: f.serverID, threadID: "thread", drafts: drafts)
+        composer.text = "original input"
+        let sending = Task { await composer.submitInput(using: f.sender, snapshot: active(), mode: .steer, features: ["steer": true]) }
+        let posted = await f.transport.waitForPost()
+        XCTAssertTrue(posted)
+        try drafts.write("edited in a newer screen", serverID: f.serverID, threadID: "thread")
+        await f.transport.releaseAccepted()
+        _ = await sending.value
+        XCTAssertEqual(try drafts.read(serverID: f.serverID, threadID: "thread"), "edited in a newer screen")
+    }
+
+    func testStaleJournalWriterPreservesOtherOperationsAndConfirmedReceipts() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let journal = OperationJournal(root: root), serverID = UUID(), firstID = UUID().uuidString, secondID = UUID().uuidString
+        func entry(_ id: String, _ state: CodexRemote.Operation.State, reviewed: Bool = false) -> CommandRecord {
+            CommandRecord(method: .input, context: "task/input:\(id)", createdAt: "2026-11-09T00:00:00Z", receipt: CodexRemote.Operation(id: id, state: state, result: .null, message: nil), reviewed: reviewed)
+        }
+        try journal.save([entry(firstID, .unknown, reviewed: true)], serverID: serverID)
+        try journal.save([entry(firstID, .unknown, reviewed: true), entry(secondID, .pending)], serverID: serverID)
+        try journal.save([entry(firstID, .accepted)], serverID: serverID)
+        try journal.save([entry(firstID, .unknown)], serverID: serverID)
+        let saved = try journal.load(serverID: serverID)
+        XCTAssertEqual(Set(saved.map(\.id)), Set([firstID, secondID]))
+        XCTAssertEqual(saved.first(where: { $0.id == firstID })?.receipt.state, .accepted)
+        XCTAssertEqual(saved.first(where: { $0.id == firstID })?.reviewed, true)
+    }
+
+    @MainActor
     private func fixture(behavior: CommandTransport.Behavior = .accepted, ready: Bool = true, write: ((Data, URL) throws -> Void)? = nil) throws -> (sender: CommandSender, transport: CommandTransport, serverID: UUID, root: URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), serverID = UUID()
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
@@ -131,16 +162,27 @@ private func pending(state: Pending.State = .pending) -> Pending {
     Pending(id: "request", threadId: "thread", turnId: "turn", kind: .command, prompt: "Controlled", options: .object(["availableDecisions": .array([.string("accept"), .string("cancel")])]), state: state)
 }
 private actor CommandTransport: BridgeTransport {
-    enum Behavior { case accepted, timeout, partial }
+    enum Behavior { case accepted, timeout, partial, held }
     let behavior: Behavior
     var posts: [Command] = []
     var reads = 0
+    private var pending: CheckedContinuation<CodexRemote.Operation, Never>?
     init(behavior: Behavior) { self.behavior = behavior }
     func command(_ command: Command) async throws -> CodexRemote.Operation {
         posts.append(command)
+        if behavior == .held { return await withCheckedContinuation { pending = $0 } }
         if behavior == .timeout { throw URLError(.timedOut) }
         return CodexRemote.Operation(id: command.id, state: behavior == .partial ? .unknown : .accepted,
                                      result: behavior == .partial ? .object(["threadId": .string("created-thread")]) : .null, message: nil)
+    }
+    func waitForPost() async -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while posts.isEmpty && Date() < deadline { try? await Task.sleep(nanoseconds: 5_000_000) }
+        return !posts.isEmpty
+    }
+    func releaseAccepted() {
+        if let command = posts.first { pending?.resume(returning: CodexRemote.Operation(id: command.id, state: .accepted, result: .null, message: nil)) }
+        pending = nil
     }
     func get<T: Decodable & Sendable>(_ path: String, as: T.Type) async throws -> T {
         reads += 1
