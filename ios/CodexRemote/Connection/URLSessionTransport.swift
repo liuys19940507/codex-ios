@@ -1,5 +1,7 @@
 import Foundation
 
+private struct HTTPFailure: Decodable { let message: String }
+
 private final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
@@ -55,8 +57,7 @@ actor URLSessionTransport: BridgeTransport {
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw ConnectionError.invalidResponse }
         guard (200..<300).contains(response.statusCode) else {
-            struct Failure: Decodable { let message: String }
-            let message = (try? JSONDecoder().decode(Failure.self, from: data).message) ?? "连接请求未成功，请检查服务地址和配对令牌。"
+            let message = (try? JSONDecoder().decode(HTTPFailure.self, from: data).message) ?? "连接请求未成功，请检查服务地址和配对令牌。"
             throw ConnectionError.server(response.statusCode, message)
         }
         return try JSONDecoder().decode(T.self, from: data)
