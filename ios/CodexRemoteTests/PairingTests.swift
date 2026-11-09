@@ -128,7 +128,7 @@ private actor PairingTransport: BridgeTransport {
         if !requested { await withCheckedContinuation { waiter = $0 } }
     }
     func finish() { response?.resume(returning: ServerInfo(apiVersion: version, serverId: "late-server", codexVersion: "0.167.0", features: [:])); response = nil }
-    func command(_ command: Command) async throws -> Operation { throw ConnectionError.invalidPath }
+    func command(_ command: Command) async throws -> CodexRemote.Operation { throw ConnectionError.invalidPath }
     nonisolated func events(after: Cursor?) -> AsyncThrowingStream<EventFrame, Error> { AsyncThrowingStream { $0.finish() } }
     func close() async { closeCount += 1 }
 }
