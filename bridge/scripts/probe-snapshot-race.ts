@@ -61,8 +61,9 @@ export async function probeSnapshotRace(options:Options) {
   });
   try {
     const read=await primary.request('thread/read',{threadId:options.threadId}) as unknown as {thread:{cwd:string;status:{type:string}}};
-    if(!samePath(read.thread.cwd,options.projectDir)||read.thread.status.type!=='idle')throw new Error('Controlled thread must match the project and be idle');
-    await primary.request('thread/resume',{threadId:options.threadId,excludeTurns:true});
+    if(!samePath(read.thread.cwd,options.projectDir)||!['idle','notLoaded'].includes(read.thread.status.type))throw new Error('Controlled thread must match the project and be idle');
+    const resumed=await primary.request('thread/resume',{threadId:options.threadId,excludeTurns:true}) as unknown as {thread:{status:{type:string}}};
+    if(resumed.thread.status.type!=='idle')throw new Error('Controlled thread is not idle after resume');
     const started=await primary.request('turn/start',{threadId:options.threadId,input:[{type:'text',text:'For this isolated streaming-consistency test, output exactly 400 numbered lines. Each line must have its three-digit number followed by the words snapshot boundary validation. Do not call tools or agents and do not add an introduction or explanation.',text_elements:[]}]}) as unknown as {turn:{id:string}};
     activeTurnId=started.turn.id;
     const deadline=Date.now()+120000;
