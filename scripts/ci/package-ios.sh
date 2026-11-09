@@ -11,7 +11,7 @@ test -f "$app/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = 'com.liuys.codexremote'
 test "$(/usr/libexec/PlistBuddy -c 'Print DTPlatformName' "$app/Info.plist")" = 'iphoneos'
 executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Info.plist")"
-lipo -verify_arch arm64 "$app/$executable"
+lipo "$app/$executable" -verify_arch arm64
 staging="$(mktemp -d "${RUNNER_TEMP:-/tmp}/codex-package.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
 mkdir "$staging/Payload"

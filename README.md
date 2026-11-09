@@ -2,7 +2,7 @@
 
 面向个人使用的原生 iOS 客户端项目，用于远程查看和操作 Windows PowerShell 中由共享 Codex app-server 承载的任务。
 
-目前处于设计阶段，尚无可安装的 App 或已实现的桥接服务。
+正在按已批准计划实现。Windows RPC 客户端已通过测试，真实共享 CLI 的晚加入接管、已有审批和 CLI 退出后任务继续运行已验证。iOS 最小应用正在实施分支构建；完整桥接和手机操作界面仍在开发。
 
 ## 方案方向
 
@@ -17,9 +17,9 @@
 
 [完整设计与待验证关卡](docs/superpowers/specs/2026-11-08-codex-ios-remote-design.md)
 
-完整设计已确认。[实施计划与三个子计划](docs/superpowers/plans/2026-11-08-codex-ios-rollout.md)已整理，产品实现尚未开始。
+完整设计已确认，正在执行[实施计划与三个子计划](docs/superpowers/plans/2026-11-08-codex-ios-rollout.md)。
 
-已有任务的实时接管、双端审批同步、免费签名安装和续签流程均需按文档验证，不能把接口存在视为已验证可用。
+已验证的协议行为及未执行项见[真实接管报告](docs/validation/live-attach.md)。免费签名安装和续签仍需真机验证。
 
 ## 参考
 
