@@ -6,6 +6,10 @@ struct CodexRemoteApp: App {
     @StateObject private var connection: ConnectionModel
     init() {
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-workspace") {
+            _connection = StateObject(wrappedValue: ConnectionModel.uiTestWorkspace())
+            return
+        }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-saved-connection") {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("CodexRemoteUITest/servers.json")
             let store = ServerStore(url: url)
@@ -18,9 +22,7 @@ struct CodexRemoteApp: App {
     }
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
-                ConnectionView()
-            }
+            AppRootView()
             .environmentObject(connection)
         }
     }

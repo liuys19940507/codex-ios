@@ -80,6 +80,20 @@ final class ConnectionModel: ObservableObject {
         await previous?.close()
     }
 
+    #if DEBUG
+    static func uiTestWorkspace() -> ConnectionModel {
+        let server = try! ServerConfiguration(name: "Fixture Windows", address: "https://fixture.invalid")
+        let store = ServerStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("CodexRemoteUITest/workspace.json"))
+        try? store.save([server])
+        let model = ConnectionModel(servers: store)
+        model.activeServerID = server.id
+        model.transport = UITestWorkspaceTransport()
+        model.info = ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "queue": false, "approvals": true])
+        model.status = .connected
+        return model
+    }
+    #endif
+
     private static func friendlyMessage(_ error: Error) -> String {
         if let error = error as? ConnectionError {
             switch error {

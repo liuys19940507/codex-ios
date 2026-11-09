@@ -8,6 +8,8 @@ final class SessionStore: ObservableObject {
     @Published private(set) var connectionState: SyncState = .disconnected
     @Published private(set) var currentServerID: UUID?
     @Published private(set) var message: String?
+    @Published private(set) var historyLoading = false
+    @Published private(set) var historyMessage: String?
     private(set) var transport: (any BridgeTransport)?
     private let makeTransport: @MainActor (ServerConfiguration) async throws -> any BridgeTransport
     private let cursors: CursorStore
@@ -32,6 +34,7 @@ final class SessionStore: ObservableObject {
         let previous = transport
         transport = nil; snapshot = nil; selectedThread = nil; loading = false; buffered = []; overflow = false
         currentServerID = server.id; cursor = nil; message = nil; connectionState = .connecting
+        historyLoading = false; historyMessage = nil
         await previous?.close()
         guard generation == connection else { return }
         do {
@@ -52,6 +55,7 @@ final class SessionStore: ObservableObject {
         let connection = generation, chosen = UUID(), originalEpoch = cursor?.epoch
         selection = chosen; selectedThread = id; loading = true; buffered = []; overflow = false
         snapshot = nil; message = nil; connectionState = .syncing
+        historyLoading = false; historyMessage = nil
         let pathID = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_"))) ?? ""
         do {
             guard !pathID.isEmpty else { throw ConnectionError.invalidPath }
@@ -111,6 +115,27 @@ final class SessionStore: ObservableObject {
         }
     }
 
+    func loadMoreHistory() async {
+        guard !loading, !historyLoading, let value = snapshot, let anchor = value.itemsCursor, let transport else { return }
+        let connection = generation, chosen = selection, id = value.thread.id
+        historyLoading = true; historyMessage = nil
+        defer { if generation == connection && selection == chosen { historyLoading = false } }
+        do {
+            let pathID = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_"))) ?? ""
+            var path = URLComponents(); path.percentEncodedPath = "/v1/threads/\(pathID)/items"
+            path.queryItems = [URLQueryItem(name: "cursor", value: anchor)]
+            let page = try await transport.get(path.string!, as: ItemPage.self)
+            guard generation == connection, selection == chosen, let current = snapshot, current.thread.id == id else { return }
+            guard page.nextCursor != anchor else { throw ConnectionError.invalidResponse }
+            snapshot = Snapshot(cursor: current.cursor, thread: current.thread, items: mergeHistory(older: page.data, current: current.items),
+                                itemsCursor: page.nextCursor, pending: current.pending, policy: current.policy)
+        } catch {
+            guard generation == connection, selection == chosen else { return }
+            if let failure = error as? ConnectionError, case .server(409, _) = failure { await selectThread(id) }
+            else { historyMessage = "无法加载较早的记录，请重试。" }
+        }
+    }
+
     private func receive(_ event: Envelope) {
         guard let current = cursor, let serverID = currentServerID else { resynchronize(); return }
         if event.cursor.epoch == current.epoch && event.cursor.seq <= current.seq { return }
@@ -146,6 +171,7 @@ final class SessionStore: ObservableObject {
         let previous = transport
         transport = nil; snapshot = nil; cursor = nil; currentServerID = nil; selectedThread = nil
         loading = false; buffered = []; message = nil; connectionState = .disconnected
+        historyLoading = false; historyMessage = nil
         await previous?.close()
     }
 }
