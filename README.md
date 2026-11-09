@@ -17,6 +17,8 @@
 
 [完整设计与待验证关卡](docs/superpowers/specs/2026-11-08-codex-ios-remote-design.md)
 
+完整设计已确认。[实施计划与三个子计划](docs/superpowers/plans/2026-11-08-codex-ios-rollout.md)已整理，产品实现尚未开始。
+
 已有任务的实时接管、双端审批同步、免费签名安装和续签流程均需按文档验证，不能把接口存在视为已验证可用。
 
 ## 参考
