@@ -107,6 +107,21 @@ final class SyncTests: XCTestCase {
         XCTAssertTrue(snapshot.items.last?.text.contains("future/tool") == true)
     }
 
+    func testSharedFixtureReplayMatchesBridgeProjection() throws {
+        let bundle = Bundle(for: Self.self)
+        let snapshotURL = try XCTUnwrap(bundle.url(forResource: "snapshot", withExtension: "json"))
+        let eventsURL = try XCTUnwrap(bundle.url(forResource: "events", withExtension: "json"))
+        var state = try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: snapshotURL))
+        let originalText = state.items[0].text
+        let events = try JSONDecoder().decode([Envelope].self, from: Data(contentsOf: eventsURL))
+        for event in events { state = reduce(snapshot: state, event: event) }
+        XCTAssertEqual(state.cursor, Cursor(epoch: "fixture-epoch", seq: 4))
+        XCTAssertEqual(state.items.map(\.id), ["fixture-item"])
+        XCTAssertEqual(state.items[0].text, originalText + "后续")
+        XCTAssertEqual(state.thread.activeTurnId, "fixture-turn")
+        XCTAssertEqual(state.pending.map(\.id), ["fixture-request"])
+    }
+
     @MainActor
     private func fixture(initial: Snapshot = base()) async throws -> (store: SessionStore, bridge: SyncTransport, server: ServerConfiguration, cursorURL: URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -1,6 +1,17 @@
 import XCTest
 
 final class LaunchTests: XCTestCase {
+    func testConnectAndEditHaveIndependentTapTargets() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-saved-connection"]
+        app.launch()
+        XCTAssertTrue(app.buttons["连接"].waitForExistence(timeout: 10))
+        app.buttons["连接"].tap()
+        XCTAssertFalse(app.navigationBars["编辑连接"].waitForExistence(timeout: 2))
+        app.buttons["编辑 Fixture Windows"].tap()
+        XCTAssertTrue(app.navigationBars["编辑连接"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.secureTextFields["配对令牌"].exists)
+    }
     func testAppLaunches() {
         let app = XCUIApplication()
         app.launch()
