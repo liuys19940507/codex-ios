@@ -1,10 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import type { Cursor, Envelope, Json, Pending, Snapshot, ThreadSummary } from '../api/contracts.js';
+import type { Cursor, Envelope, Json, Operation, Pending, Snapshot, ThreadSummary } from '../api/contracts.js';
 import { ApiError, projectForCwd } from '../api/validation.js';
 import type { RuntimeConfig } from '../runtime/config.js';
 
 export type StoredPending={record:Pending;rpcId:string|number;connectionId:string};
+export type StoredOperation={digest:string;receipt:Operation};
 export class Store {
   private readonly db:DatabaseSync;
   private epoch=randomUUID();
@@ -21,6 +22,7 @@ export class Store {
         CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY,thread_id TEXT NOT NULL,type TEXT NOT NULL,data TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sources(connection_id TEXT NOT NULL,lo INTEGER NOT NULL,hi INTEGER NOT NULL,PRIMARY KEY(connection_id,lo));
         CREATE TABLE IF NOT EXISTS pending(id TEXT PRIMARY KEY,connection_id TEXT NOT NULL,rpc_key TEXT NOT NULL,value TEXT NOT NULL,UNIQUE(connection_id,rpc_key));
+        CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,value TEXT NOT NULL);
         PRAGMA user_version=1;`);
       this.resetEpoch();
     } catch(error) {this.db.close();throw error;}
@@ -43,6 +45,13 @@ export class Store {
         const value=JSON.parse(String(row.value)) as StoredPending;
         if(value.record.state==='pending')value.record.state='unknown';
         this.db.prepare('UPDATE pending SET value=? WHERE id=?').run(JSON.stringify(value),String(row.id));
+      }
+      for(const row of this.db.prepare('SELECT id,value FROM operations').all()) {
+        const value=JSON.parse(String(row.value)) as StoredOperation;
+        if(value.receipt.state==='pending') {
+          value.receipt.state='unknown';value.receipt.message='The previous connection ended before confirmation; do not resend automatically.';
+          this.putOperation(value);
+        }
       }
     });
     this.epoch=randomUUID();this.seq=0;
@@ -101,6 +110,14 @@ export class Store {
   pendingByRpc(connectionId:string,rpcId:string|number):StoredPending|null {
     const row=this.db.prepare('SELECT value FROM pending WHERE connection_id=? AND rpc_key=?').get(connectionId,JSON.stringify(rpcId));
     return row?JSON.parse(String(row.value)) as StoredPending:null;
+  }
+  operation(id:string):StoredOperation|null {
+    const row=this.db.prepare('SELECT value FROM operations WHERE id=?').get(id);
+    return row?JSON.parse(String(row.value)) as StoredOperation:null;
+  }
+  putOperation(value:StoredOperation):void {
+    this.db.prepare('INSERT INTO operations VALUES(?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value')
+      .run(value.receipt.id,JSON.stringify(value));
   }
   close():void {if(!this.closed){this.closed=true;this.db.close();}}
 }
