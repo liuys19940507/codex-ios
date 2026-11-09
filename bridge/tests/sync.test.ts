@@ -12,11 +12,22 @@ import type { Json } from '../src/api/contracts.js';
 
 const delta=(text:string):Json=>({method:'item/agentMessage/delta',params:{threadId:'thread',turnId:'turn',itemId:'message',delta:text}});
 const completion=(text:string):Json=>({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{type:'agentMessage',id:'message',text,completedAtMs:100}}});
+
+test('pending_forms_keep_schema_and_mark_unknown_requests_read_only',async t=>{
+  const f=await fixture(t);
+  const schema={type:'object',properties:{name:{type:'string'}},required:['name']};
+  f.apply(1,{id:90,method:'mcpServer/elicitation/request',params:{threadId:'thread',turnId:'turn',mode:'form',serverName:'controlled',message:'Name',requestedSchema:schema,privateCredential:'do-not-copy'}});
+  f.apply(2,{id:91,method:'item/tool/call',params:{threadId:'thread',turnId:'turn',tool:'unknown',arguments:{secret:'do-not-copy'}}});
+  const pending=f.store.snapshot('thread').pending;
+  assert.deepEqual((pending[0]!.options as Record<string,Json>).requestedSchema,schema);
+  assert.equal((pending[1]!.options as Record<string,Json>).readOnly,true);
+  assert.equal(JSON.stringify(pending).includes('do-not-copy'),false);
+});
 const resume={thread:{id:'thread',cwd:'C:/controlled/project',name:'Controlled',preview:'Test',parentThreadId:null,status:{type:'active'},turns:[]},
   approvalPolicy:'on-request',sandbox:{type:'readOnly'},itemsBackwardsCursor:null,
   initialTurnsPage:{data:[{id:'turn',status:'inProgress',items:[],itemsView:'full'}],nextCursor:null}};
 
-async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;memory?:boolean}={}) {
+async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;memory?:boolean;announce?:boolean}={}) {
   const dir=await mkdtemp(join(tmpdir(),'codex-sync-'));
   const stores:Store[]=[];
   let server:Awaited<ReturnType<typeof fakeServer>>|undefined,rpc:RpcClient|undefined,sync:SyncService|undefined;
@@ -25,7 +36,11 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
   const calls:string[]=[];
   const resumeParams:unknown[]=[];
   server=await fakeServer((socket,m)=>{
-    if(handshake(socket,m)||m.method==='initialized')return;
+    if(handshake(socket,m))return;
+    if(m.method==='initialized') {
+      if(options.announce)socket.send(JSON.stringify({method:'thread/started',params:{thread:resume.thread}}));
+      return;
+    }
     calls.push(m.method!);
     if(m.method==='thread/loaded/list')socket.send(JSON.stringify({id:m.id,result:{data:options.unloaded?[]:['thread']}}));
     else if(m.method==='thread/read')socket.send(JSON.stringify({id:m.id,result:{thread:{...resume.thread,status:{type:'notLoaded'},turns:[{id:'old',status:'completed',items:[{id:'history',type:'agentMessage',text:'history'}]}]}}}));
@@ -40,11 +55,18 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
   const store=openStore(file);stores.push(store);
   store.setProjects([{id:'project',name:'Controlled',path:'C:/controlled/project'}]);
   const activeSync=createSync(store,rpc);sync=activeSync;
+  if(options.announce){const end=Date.now()+1000;while(!store.has('thread')&&Date.now()<end)await delay(5);assert.equal(store.has('thread'),true);}
   await sync.snapshot('thread');
   const apply=(ordinal:number,message:Json)=>activeSync.applyEvent({connectionId:'fixture',ordinal,message});
   const item=()=>store.snapshot('thread').items.find(i=>i.id==='message')!;
   return {file,store,sync:activeSync,apply,item,calls,stores,resumeParams};
 }
+
+test('announced_thread_still_attaches_before_treating_cached_state_as_live',async t=>{
+  const f=await fixture(t,{announce:true});
+  assert.equal(f.calls.filter(method=>method==='thread/resume').length,1);
+  assert.equal(f.store.snapshot('thread').thread.activeTurnId,'turn');
+});
 
 test('paged_resume_uses_the_real_full_item_history_contract',async t=>{
   const f=await fixture(t);
@@ -136,6 +158,16 @@ test('pending_preserves_original_rpc_id_and_resolution_is_idempotent',async t=>{
   assert.equal(pending.length,1);assert.equal(f.store.pending(pending[0]!.id)?.rpcId,0);
   f.apply(3,{method:'serverRequest/resolved',params:{threadId:'thread',requestId:0}});
   f.apply(4,request);
+  assert.equal(f.store.snapshot('thread').pending.length,0);
+});
+
+test('claimed_pending_is_disabled_once_and_authoritative_resolution_clears_it',async t=>{
+  const f=await fixture(t),connectionId=f.sync.connectionId;
+  f.sync.applyEvent({connectionId,ordinal:1,message:{method:'item/commandExecution/requestApproval',id:77,params:{threadId:'thread',turnId:'turn',availableDecisions:['accept']}}});
+  const id=f.store.snapshot('thread').pending[0]!.id;
+  assert.equal(f.sync.claimPending(id).record.state,'unknown');
+  assert.throws(()=>f.sync.claimPending(id));
+  f.sync.applyEvent({connectionId,ordinal:2,message:{method:'serverRequest/resolved',params:{threadId:'thread',requestId:77}}});
   assert.equal(f.store.snapshot('thread').pending.length,0);
 });
 

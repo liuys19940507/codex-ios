@@ -1,0 +1,10 @@
+[
+  {
+    "code": "request_expired",
+    "message": "This request is no longer valid"
+  },
+  {
+    "code": "upstream_unavailable",
+    "message": "Codex is reconnecting"
+  }
+]

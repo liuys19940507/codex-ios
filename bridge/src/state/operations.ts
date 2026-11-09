@@ -13,11 +13,12 @@ function canonical(value:unknown):unknown {
   if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,v])=>[key,canonical(v)]));
   return value;
 }
+const digestFor=(command:Command)=>createHash('sha256').update(JSON.stringify(canonical(command))).digest('hex');
 export function createOperations(store:Store) {
   const inflight=new Map<string,Promise<Operation>>();
   async function executeOnce(raw:Command,send:()=>Promise<Json>):Promise<Operation> {
     const command=validateCommand(raw);
-    const digest=createHash('sha256').update(JSON.stringify(canonical(command))).digest('hex');
+    const digest=digestFor(command);
     const existing=store.atomic(()=>{
       const value=store.operation(command.id);
       if(value)return value;
@@ -42,6 +43,11 @@ export function createOperations(store:Store) {
     inflight.set(command.id,work);
     try{return await work;}finally{inflight.delete(command.id);}
   }
-  return {executeOnce,getOperation:(id:string):Operation|null=>store.operation(id)?.receipt??null};
+  function lookup(raw:Command):Operation|null {
+    const command=validateCommand(raw),existing=store.operation(command.id);
+    if(existing&&existing.digest!==digestFor(command))throw new ApiError(409,'operation_conflict','This command id belongs to different input');
+    return existing?.receipt??null;
+  }
+  return {executeOnce,lookup,getOperation:(id:string):Operation|null=>store.operation(id)?.receipt??null};
 }
 export type Operations=ReturnType<typeof createOperations>;

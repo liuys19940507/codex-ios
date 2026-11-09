@@ -28,7 +28,7 @@ targets:
     platform: iOS
     sources:
       - path: CodexRemoteTests
-      - path: ../contracts/fixtures/info.json
+      - path: ../contracts/fixtures
         buildPhase: resources
     dependencies:
       - target: CodexRemote

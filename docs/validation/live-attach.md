@@ -11,8 +11,10 @@ Validated on Windows PowerShell, native Codex CLI **0.167.0**, Node **22.22.0**,
 | Duplicate response from another client | PASS | Another attached connection received the pending request; replying after resolution produced no second completion or marker modification during observation. |
 | Disconnect and reconnect | PASS | A fresh connection retrieved the same completed turn. |
 | User question / permission request / MCP elicitation | NOT RUN | Not triggered by this command probe. |
-| Steer / interrupt / queue | NOT RUN | Must be separately proven before enabling these capabilities. |
-| iPhone / EasyTier / signing | NOT RUN | This is loopback protocol validation only. |
+| Steer / interrupt | PASS | Follow-up W6 adapter probe steered the same active turn and observed that exact turn become interrupted. |
+| Queue | Disabled | No validated queue adapter; client must retain a draft. |
+| Rename / archive | PASS | W6 dispatcher renamed a controlled thread; archived thread was retrieved from the archived list. |
+| iPhone / EasyTier task control | NOT RUN | First iOS26.5 installation and launch passed; authenticated bridge pairing remains pending W7/I2. |
 
 The final live probe returned `passed: true` with `sameLiveTurn`, `lateApproval`, `cliExitPreservesTask`, `duplicateResponseIgnored` and `reconnectRestoresState` all true. Its synthetic contract tests passed 3/3; deliberately disabling fake-server approval replay made those assertions fail. Synthetic results are not the basis of the live conclusions above.
 
@@ -69,3 +71,11 @@ The probe sends an approval for the exact recorded command. Run it only against 
 - 受控回合完成后才关闭两个测试客户端并停止本次自有 app-server。
 
 这验证了已批准的修订行为，不表示未完成消息此前的前文能立即恢复，也不表示已完成 iPhone 控制或真机安装。取消且没有完整结束内容时继续显示不完整提示。
+
+## W6 business adapter follow-up
+
+The real dispatcher on native0.167.0 passed steering, interruption, rename, archive and single-use command approval. The controlled approval wrote only marker.txt inside the isolated probe project; no existing user task was changed. The archive verification initially filtered only appServer sources, but this host classified the controlled thread as vscode; read-only verification using the full supported source set found the archived thread. This was a probe-filter error, and product queries already use that full set.
+
+The probe found and fixed a real subscription bug: thread/started is a global announcement, so it cannot mark an independent client as subscribed. A regression first failed with zero resume calls, then passed after readiness was restricted to the snapshot/resume barrier. New threads without a first turn can lack a persisted rollout; the live attachment probe therefore joins an already streaming task, matching the takeover use case. Empty pre-turn hydration is not claimed as verified.
+
+File approvals, questions, requested permission subsets and typed MCP forms have protocol/schema tests. Their real native request-generation paths remain untriggered; URL/verification/openai-form MCP flows remain read-only. Queue is disabled. Shared JSON fixtures are synthetic, contain no credentials, and are decoded by both Node and Swift tests.

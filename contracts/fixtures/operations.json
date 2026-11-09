@@ -1,0 +1,19 @@
+[
+  {
+    "id": "4a1ec8a5-c25a-4cda-b061-0bf9b06b8d4b",
+    "state": "unknown",
+    "result": {
+      "threadId": "fixture-thread"
+    },
+    "message": "Check the task before sending again."
+  },
+  {
+    "id": "e054aa1f-f9eb-4387-a553-935fc43aa52a",
+    "state": "accepted",
+    "result": {
+      "threadId": "fixture-thread",
+      "turnId": "fixture-turn"
+    },
+    "message": null
+  }
+]

@@ -25,13 +25,29 @@ export class SyncService {
         buffer.push(frame);
       } else if(this.ready.has(threadId))this.applyEvent(frame);
       else if(object(message).method==='thread/started'&&this.store.project(String(object(p.thread).cwd??''))) {
-        this.install({thread:p.thread});this.ready.add(threadId);this.applyEvent(frame);
+        // thread/started is a global announcement, not a stream subscription.
+        // Only the snapshot/resume barrier can mark this client ready.
+        this.install({thread:p.thread});this.applyEvent(frame);
       } else this.store.atomic(()=>this.store.markSource(frame.connectionId,frame.ordinal));
     });
   }
   onEvent(handler:(event:Envelope)=>void):()=>void {this.listeners.add(handler);return ()=>this.listeners.delete(handler);}
   replay(cursor:Cursor):Envelope[]|'resync_required' {return this.store.replay(cursor);}
   close():void {this.unsubscribe();this.listeners.clear();}
+  claimPending(id:string) {
+    const stored=this.store.pending(id);
+    if(!stored||stored.connectionId!==this.connectionId||stored.record.state!=='pending')throw new ApiError(409,'request_expired','This request is no longer pending');
+    const snapshot=this.store.snapshot(stored.record.threadId);
+    if(snapshot.thread.activeTurnId!==stored.record.turnId)throw new ApiError(409,'request_expired','The request belongs to a previous turn');
+    let envelope:Envelope;
+    this.store.atomic(()=>{
+      stored.record.state='unknown';this.store.putPending(stored.record,stored.connectionId,stored.rpcId);
+      snapshot.pending=snapshot.pending.map(p=>p.id===id?stored.record:p);
+      this.store.putSnapshot(snapshot);envelope=this.store.append(stored.record.threadId,'pending/upsert',stored.record as unknown as Json);
+    });
+    for(const listener of this.listeners)listener(envelope!);
+    return stored;
+  }
   snapshot(threadId:string):Promise<Snapshot> {
     if(this.ready.has(threadId))return Promise.resolve(this.store.snapshot(threadId));
     const active=this.inflight.get(threadId);if(active)return active;
@@ -124,16 +140,26 @@ export class SyncService {
       else if(method==='turn/plan/updated')upsert({id:`plan:${p.turnId}`,turnId:String(p.turnId),kind:'plan',text:(Array.isArray(p.plan)?p.plan:[]).map((step:unknown)=>String(object(step).step??'')).join('\n'),data:{steps:p.plan??[],prefixComplete:true,completed:false}});
       else if(method==='serverRequest/resolved'&&(typeof p.requestId==='string'||typeof p.requestId==='number')) {
         const stored=this.store.pendingByRpc(frame.connectionId,p.requestId);
-        if(stored&&stored.record.state==='pending') {
+        if(stored&&stored.record.state!=='resolved') {
           stored.record.state='resolved';this.store.putPending(stored.record,frame.connectionId,stored.rpcId);
           snapshot.pending=snapshot.pending.filter(item=>item.id!==stored.record.id);publish('pending/resolved',{id:stored.record.id});
         }
       } else if((typeof msg.id==='string'||typeof msg.id==='number')&&method) {
         const existing=this.store.pendingByRpc(frame.connectionId,msg.id);
         if(!existing&&typeof p.turnId==='string') {
-          const kind:Pending['kind']=method.includes('commandExecution')?'command':method.includes('fileChange')?'file':method.includes('requestUserInput')?'question':method.includes('permissions')?'permission':'mcp';
+          const kinds:Record<string,Pending['kind']>={'item/commandExecution/requestApproval':'command','item/fileChange/requestApproval':'file','item/tool/requestUserInput':'question','item/permissions/requestApproval':'permission','mcpServer/elicitation/request':'mcp'};
+          const kind:Pending['kind']=kinds[method]??'mcp';
+          const options:Record<string,Json>={readOnly:!kinds[method]};
+          if(kind==='command')options.availableDecisions=Array.isArray(p.availableDecisions)?p.availableDecisions:[];
+          if(kind==='file'&&typeof p.grantRoot==='string')options.grantRoot=p.grantRoot;
+          if(kind==='question')options.questions=(Array.isArray(p.questions)?p.questions:[]).map((raw:unknown)=>{
+            const q=object(raw);return {id:String(q.id??''),header:String(q.header??''),question:String(q.question??''),isOther:q.isOther===true,isSecret:q.isSecret===true,
+              options:Array.isArray(q.options)?q.options.map((v:unknown)=>({label:String(object(v).label??''),description:String(object(v).description??'')})):null};
+          });
+          if(kind==='permission')options.permissions=p.permissions??null;
+          if(kind==='mcp'&&kinds[method]){options.mode=p.mode??null;options.serverName=p.serverName??null;options.requestedSchema=p.requestedSchema??null;}
           const pending:Pending={id:randomUUID(),threadId,turnId:p.turnId,kind,prompt:String(p.reason??p.command??p.message??'Review the pending request'),
-            options:{availableDecisions:Array.isArray(p.availableDecisions)?p.availableDecisions:[],questions:Array.isArray(p.questions)?p.questions:[],permissions:p.permissions??null},state:'pending'};
+            options,state:'pending'};
           this.store.putPending(pending,frame.connectionId,msg.id);snapshot.pending.push(pending);publish('pending/upsert',pending);
         }
       } else if(method.startsWith('item/'))upsert({id:`unknown:${frame.connectionId}:${frame.ordinal}`,turnId:String(p.turnId??''),kind:'unknown',text:`Unsupported activity: ${method}`,data:{method,prefixComplete:false,completed:false}});

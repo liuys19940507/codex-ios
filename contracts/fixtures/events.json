@@ -1,0 +1,31 @@
+[
+  {
+    "cursor": {
+      "epoch": "fixture-epoch",
+      "seq": 3
+    },
+    "threadId": "fixture-other",
+    "type": "thread/upsert",
+    "data": {
+      "id": "fixture-other",
+      "projectId": "fixture-project",
+      "title": "中文任务",
+      "status": "active",
+      "activeTurnId": "fixture-turn",
+      "parentId": null
+    }
+  },
+  {
+    "cursor": {
+      "epoch": "fixture-epoch",
+      "seq": 4
+    },
+    "threadId": "fixture-thread",
+    "type": "item/delta",
+    "data": {
+      "id": "fixture-item",
+      "turnId": "fixture-turn",
+      "text": "后续"
+    }
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": "fixture-thread",
+      "projectId": "fixture-project",
+      "title": "中文任务",
+      "status": "active",
+      "activeTurnId": "fixture-turn",
+      "parentId": null
+    },
+    {
+      "id": "fixture-child",
+      "projectId": "fixture-project",
+      "title": "中文任务",
+      "status": "active",
+      "activeTurnId": "fixture-turn",
+      "parentId": "fixture-thread"
+    }
+  ],
+  "nextCursor": null
+}

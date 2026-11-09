@@ -1,0 +1,47 @@
+{
+  "cursor": {
+    "epoch": "fixture-epoch",
+    "seq": 2
+  },
+  "thread": {
+    "id": "fixture-thread",
+    "projectId": "fixture-project",
+    "title": "中文任务",
+    "status": "active",
+    "activeTurnId": "fixture-turn",
+    "parentId": null
+  },
+  "items": [
+    {
+      "id": "fixture-item",
+      "turnId": "fixture-turn",
+      "kind": "agentMessage",
+      "text": "部分输出\r\nnext line",
+      "data": {
+        "prefixComplete": false,
+        "completed": false
+      }
+    }
+  ],
+  "itemsCursor": null,
+  "pending": [
+    {
+      "id": "fixture-request",
+      "threadId": "fixture-thread",
+      "turnId": "fixture-turn",
+      "kind": "command",
+      "prompt": "Controlled approval",
+      "options": {
+        "availableDecisions": [
+          "accept",
+          "cancel"
+        ]
+      },
+      "state": "pending"
+    }
+  ],
+  "policy": {
+    "approvalPolicy": "on-request",
+    "sandbox": "readOnly"
+  }
+}
