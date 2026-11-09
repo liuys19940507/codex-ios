@@ -126,7 +126,11 @@ struct ConnectionView: View {
         }
         .navigationTitle("Codex Remote")
         .toolbar {
-            if !connection.servers.isEmpty { ToolbarItem(placement: .primaryAction) { Button("添加连接", systemImage: "plus") { adding = true } } }
+            if !connection.servers.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { adding = true } label: { Label("添加连接", systemImage: "plus") }
+                }
+            }
         }
         .sheet(isPresented: $adding) { NavigationStack { ServerEditorView() }.environmentObject(connection) }
         .sheet(item: $editing) { server in NavigationStack { ServerEditorView(server: server) }.environmentObject(connection) }
