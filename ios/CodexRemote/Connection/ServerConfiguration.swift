@@ -1,7 +1,7 @@
 import Foundation
 
 enum ConnectionError: LocalizedError {
-    case invalidAddress, invalidPath, invalidResponse, missingCredential
+    case invalidAddress, invalidPath, invalidResponse, missingCredential, incompatibleServer
     case server(Int, String)
     var errorDescription: String? {
         switch self {
@@ -9,6 +9,7 @@ enum ConnectionError: LocalizedError {
         case .invalidPath: return "请求路径无效。"
         case .invalidResponse: return "服务端返回了无法识别的数据。"
         case .missingCredential: return "请填写配对令牌。"
+        case .incompatibleServer: return "服务版本不兼容。"
         case .server(let status, let message): return "\(message)（\(status)）"
         }
     }
