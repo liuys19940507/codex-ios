@@ -55,7 +55,7 @@ export async function startBridge(config: RuntimeConfig, dependencies: Dependenc
   const requireValue = <T>(value: T | undefined): T => { if (!value) throw new ApiError(503, 'upstream_unavailable', 'Codex is reconnecting'); return value; };
   // Real control probe passed on 0.167.0. Other request-generation paths stay
   // disabled until independently exercised against the native server.
-  const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: false, permissions: false, questions: false, mcp: false };
+  const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: true, permissions: false, questions: true, mcp: false };
   const api = createApiServer({ token, info: { apiVersion: 1, serverId, codexVersion: '0.167.0', features }, available: () => available,
     queries: {
       queryProjects: () => requireValue(queries).queryProjects(), queryModels: () => requireValue(queries).queryModels(),

@@ -18,9 +18,11 @@ test('pending_forms_keep_schema_and_mark_unknown_requests_read_only',async t=>{
   const schema={type:'object',properties:{name:{type:'string'}},required:['name']};
   f.apply(1,{id:90,method:'mcpServer/elicitation/request',params:{threadId:'thread',turnId:'turn',mode:'form',serverName:'controlled',message:'Name',requestedSchema:schema,privateCredential:'do-not-copy'}});
   f.apply(2,{id:91,method:'item/tool/call',params:{threadId:'thread',turnId:'turn',tool:'unknown',arguments:{secret:'do-not-copy'}}});
+  f.apply(3,{id:92,method:'item/fileChange/requestApproval',params:{threadId:'thread',turnId:'turn',itemId:'controlled-edit',reason:'Review controlled edit'}});
   const pending=f.store.snapshot('thread').pending;
   assert.deepEqual((pending[0]!.options as Record<string,Json>).requestedSchema,schema);
   assert.equal((pending[1]!.options as Record<string,Json>).readOnly,true);
+  assert.equal((pending[2]!.options as Record<string,Json>).itemId,'controlled-edit');
   assert.equal(JSON.stringify(pending).includes('do-not-copy'),false);
 });
 const resume={thread:{id:'thread',cwd:'C:/controlled/project',name:'Controlled',preview:'Test',parentThreadId:null,status:{type:'active'},turns:[]},

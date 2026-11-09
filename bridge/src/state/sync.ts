@@ -162,6 +162,7 @@ export class SyncService {
           const kinds:Record<string,Pending['kind']>={'item/commandExecution/requestApproval':'command','item/fileChange/requestApproval':'file','item/tool/requestUserInput':'question','item/permissions/requestApproval':'permission','mcpServer/elicitation/request':'mcp'};
           const kind:Pending['kind']=kinds[method]??'mcp';
           const options:Record<string,Json>={readOnly:!kinds[method]};
+          if((kind==='command'||kind==='file')&&typeof p.itemId==='string')options.itemId=p.itemId;
           if(kind==='command')options.availableDecisions=Array.isArray(p.availableDecisions)?p.availableDecisions:[];
           if(kind==='file'&&typeof p.grantRoot==='string')options.grantRoot=p.grantRoot;
           if(kind==='question')options.questions=(Array.isArray(p.questions)?p.questions:[]).map((raw:unknown)=>{
