@@ -1,0 +1,38 @@
+import XCTest
+@testable import CodexRemote
+
+final class ConnectionTests: XCTestCase {
+    func testRejectsUnsafeServerAddresses() throws {
+        for address in ["file:///etc/passwd", "ftp://example.com", "http://user:pass@example.com", "https://example.com/?token=secret", "https://example.com/#token"] {
+            XCTAssertThrowsError(try ServerConfiguration(name: "Test", address: address), address)
+        }
+        let server = try ServerConfiguration(name: "Windows", address: "http://10.147.21.2:8391/")
+        XCTAssertEqual(server.baseURL.host, "10.147.21.2")
+    }
+
+    func testAuthenticationCannotEscapeConfiguredHost() throws {
+        let server = try ServerConfiguration(name: "Windows", address: "http://10.147.21.2:8391")
+        let request = try URLSessionTransport.makeRequest(server: server, token: "test-token", path: "/v1/info")
+        XCTAssertEqual(request.url?.host, "10.147.21.2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+        XCTAssertFalse(request.url!.absoluteString.contains("test-token"))
+        for path in ["https://other.example/v1/info", "//other.example/v1/info", "/other", "/v1/../secret"] {
+            XCTAssertThrowsError(try URLSessionTransport.makeRequest(server: server, token: "test-token", path: path))
+        }
+    }
+
+    func testCredentialNamespacesAreIndependent() throws {
+        let credentials = CredentialStore(service: "com.liuys.codexremote.tests.\(UUID().uuidString)")
+        let first = UUID(), other = UUID()
+        defer { try? credentials.delete(serverID: first); try? credentials.delete(serverID: other) }
+        try credentials.save(token: "test-token", serverID: first)
+        try credentials.save(token: "other-token", serverID: other)
+        XCTAssertEqual(try credentials.load(serverID: first), "test-token")
+        XCTAssertEqual(try credentials.load(serverID: other), "other-token")
+        try credentials.save(token: "updated", serverID: first)
+        XCTAssertEqual(try credentials.load(serverID: first), "updated")
+        try credentials.delete(serverID: first)
+        XCTAssertNil(try credentials.load(serverID: first))
+        XCTAssertEqual(try credentials.load(serverID: other), "other-token")
+    }
+}
