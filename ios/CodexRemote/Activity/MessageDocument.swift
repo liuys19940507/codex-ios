@@ -4,7 +4,9 @@ enum RawText {
     static func lines(_ text: String) -> [String] {
         var start = text.startIndex, result: [String] = []
         while start < text.endIndex {
-            let end = text.unicodeScalars[start...].firstIndex(where: { $0.value == 10 }).map { text.unicodeScalars.index(after: $0) } ?? text.endIndex
+            let end: String.Index
+            if let newline = text.unicodeScalars[start...].firstIndex(where: { $0.value == 10 }) { end = text.unicodeScalars.index(after: newline) }
+            else { end = text.endIndex }
             result.append(String(text[start..<end])); start = end
         }
         return result
