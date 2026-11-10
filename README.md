@@ -8,6 +8,8 @@ Windows 桥接与原生 SwiftUI 客户端已实现。真实 iPhone 已接入 Pow
 
 中途接入生成中的消息时，先标记部分输出，结束后用完整消息补齐；用户已接受并完成[恢复行为修订](docs/superpowers/specs/2026-11-08-live-stream-recovery-amendment.md)验证。Windows 配置及启动方式见[运行说明](docs/windows-setup.md)。
 
+参考 Android 的[本轮改进](docs/android-reference.md)增加多项目发现、会话刷新与释放、按轮次折叠处理过程、Markdown/代码与文件差异视图和底部输入框。[验证记录](docs/validation/conversation-experience.md)区分自动检查、实际 Windows 验证和待执行的手机覆盖安装。
+
 ## 方案方向
 
 - 原生 SwiftUI 客户端，最低 iOS16.0。
@@ -31,4 +33,4 @@ Windows 桥接与原生 SwiftUI 客户端已实现。真实 iPhone 已接入 Pow
 
 ## 参考
 
-功能参考 [hebo6/codex-android](https://github.com/hebo6/codex-android)。本项目为独立的非官方客户端项目，与 OpenAI 无关联或背书。
+功能参考 [liuys19940507/codex-android](https://github.com/liuys19940507/codex-android)（源自 [hebo6/codex-android](https://github.com/hebo6/codex-android)）。本项目为独立的非官方客户端项目，与 OpenAI 无关联或背书。

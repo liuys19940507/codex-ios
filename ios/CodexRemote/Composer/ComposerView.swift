@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor
 struct ComposerView: View {
@@ -13,7 +14,8 @@ struct ComposerView: View {
     var onCreated: ((String) -> Void)? = nil
     var compact = false
     @State private var mode: InputMode = .steer
-    @State private var editorHeight: CGFloat = 56
+    @State private var editorWidth: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var editorFontSize: CGFloat = 17
     @FocusState private var editing: Bool
     private var running: Bool { snapshot?.thread.activeTurnId != nil || snapshot?.thread.status == "active" }
     private var chosenMode: InputMode {
@@ -32,6 +34,16 @@ struct ComposerView: View {
         if projectID != nil { return settings.canCreate }
         guard snapshot != nil else { return false }
         return !running || (chosenMode == .steer ? features["steer"] == true : features["queue"] == true)
+    }
+    private var editorHeight: CGFloat {
+        let font = UIFont.systemFont(ofSize: editorFontSize)
+        // UITextView has 5pt line-fragment padding on both sides and 8pt
+        // vertical insets. Measure width only, avoiding a height feedback loop.
+        let width = max(1, editorWidth - 10)
+        let value = String(model.text.prefix(4096)) + "\u{200B}"
+        let bounds = (value as NSString).boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil)
+        return min(160, max(56, ceil(max(font.lineHeight, bounds.height) + 20)))
     }
     var body: some View {
         Group {
@@ -80,19 +92,15 @@ struct ComposerView: View {
     private var compactComposer: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 8) {
-                TextEditor(text: $model.text).font(.body).scrollContentBackground(.hidden)
-                    .frame(height: editorHeight).padding(4)
-                    .background {
-                        Text(model.text.isEmpty ? " " : model.text).font(.body).padding(9)
-                            .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-                            .background(GeometryReader { value in Color.clear.preference(key: ComposerHeightKey.self, value: value.size.height) })
-                            .hidden()
-                    }
+                TextEditor(text: $model.text).font(.system(size: editorFontSize)).scrollContentBackground(.hidden)
+                    .frame(height: editorHeight)
+                    .background(GeometryReader { value in Color.clear.preference(key: ComposerWidthKey.self, value: value.size.width) })
+                    .padding(4)
                     .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                     .accessibilityIdentifier("任务草稿").accessibilityLabel("任务草稿").disabled(!model.writable).focused($editing)
-                    .onPreferenceChange(ComposerHeightKey.self) { editorHeight = min(120, max(56, $0)) }
+                    .onPreferenceChange(ComposerWidthKey.self) { if $0 > 0, abs($0 - editorWidth) > 0.5 { editorWidth = $0 } }
                 Button { Task { await send() } } label: {
-                    Group { if sender.busy { ProgressView() } else { Image(systemName: "arrow.up") } }.frame(width: 28, height: 32)
+                    Group { if sender.busy { ProgressView() } else { Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)) } }.frame(width: 28, height: 32)
                 }.buttonStyle(.borderedProminent).disabled(!enabled)
                     .accessibilityLabel(running ? "追加指令" : "发送指令")
             }
@@ -104,7 +112,7 @@ struct ComposerView: View {
                     ForEach(["继续完成当前任务", "先说明计划，再执行", "检查改动并运行相关测试"], id: \.self) { phrase in
                         Button(phrase) { model.text += model.text.isEmpty ? phrase : "\n" + phrase }
                     }
-                } label: { Image(systemName: "text.badge.plus").frame(minWidth: 44, minHeight: 44) }
+                } label: { Image(systemName: "text.badge.plus").font(.system(size: 18)).frame(minWidth: 44, minHeight: 44) }
                     .disabled(!model.writable)
                     .accessibilityLabel("插入常用指令").accessibilityHint("添加到草稿后由你发送")
             }
@@ -122,8 +130,8 @@ struct ComposerView: View {
     }
 }
 
-private struct ComposerHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 56
+private struct ComposerWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 

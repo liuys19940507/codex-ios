@@ -43,12 +43,15 @@ struct RawOutputSheet: View {
     @State private var copied = false
     var body: some View {
         NavigationStack {
-            ScrollView([.horizontal, .vertical]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(ActivityPresentation.chunks(text).enumerated()), id: \.offset) { _, chunk in
-                        Text(chunk).font(.callout.monospaced()).textSelection(.enabled).fixedSize(horizontal: true, vertical: true)
-                    }
-                }.padding()
+            GeometryReader { viewport in
+                ScrollView([.horizontal, .vertical]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(ActivityPresentation.chunks(text).enumerated()), id: \.offset) { _, chunk in
+                            Text(chunk).font(.callout.monospaced()).textSelection(.enabled).fixedSize(horizontal: true, vertical: true)
+                        }
+                    }.padding()
+                        .frame(minWidth: viewport.size.width, minHeight: viewport.size.height, alignment: .topLeading)
+                }
             }
             .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
             .toolbar {

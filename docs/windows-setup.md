@@ -25,6 +25,18 @@
 
 此入口复用或启动独立 app-server 和手机桥接，再进入原生远程 CLI。退出 CLI 或关闭 PowerShell 窗口不会停止它们。手机只控制同一共享 app-server 中的任务；普通入口已在其他进程中运行的任务不会被此脚本迁移。
 
+启用自动项目发现时，在私有运行配置加入 `"discoverProjects": true`。桥接从同一 Codex 数据目录的已有会话中发现工作目录；手机可以选择全部项目或单一目录。关闭或省略此项时继续只允许 `projects` 中配置的根目录。该选项没有扫描整块磁盘，也不会合并 WSL 或另一个 `CODEX_HOME` 的账号数据。
+
+共享启动器现在可以省略 `-ProjectId`，使用终端当前目录；也可传 `-ProjectPath`。静态模式下仍会检查目录属于已配置根目录。
+
+```powershell
+.\scripts\windows\Start-CodexRemote.ps1 -ConfigPath C:\ProgramData\CodexRemote\Bridge\runtime.json
+```
+
+本机经本人确认，PowerShell 的 `codex` 函数已改用 `Start-CodexDefault.ps1`，同时保留原 profile 备份。新开 PowerShell 即可使用；当前窗口可以执行 `. $PROFILE` 重新加载。日常 `codex`、`codex resume <会话ID>` 进入共享服务并保留当前目录。维护命令、显式指定的其他远程连接、`--no-daemon` 和备用 `CODEX_HOME` 继续按原生方式运行，桥接令牌只注入需要它的本机共享子进程。
+
+手机进入会话会建立带 UUID 的订阅，工具栏刷新会重新同步历史并尝试连接；返回任务列表释放该订阅，不发送中断。如果独立 CLI 进程仍持有写入锁，手机只读显示历史，需退出电脑端那个独立会话后再刷新。共享 CLI 与手机可以同时连接。原生服务只会卸载空闲且没有其他订阅者的会话，运行中任务继续执行。
+
 仅启动后台桥接，不新建模型任务：
 
 ```powershell

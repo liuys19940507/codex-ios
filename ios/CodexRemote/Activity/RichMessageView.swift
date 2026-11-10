@@ -22,8 +22,9 @@ struct RichMessageView: View {
                     if !block.complete { Text("代码块未闭合").font(.caption).foregroundStyle(.secondary) }
                 } else {
                     Markdown(String(block.content.prefix(16000)))
-                        .markdownTheme(.gitHub)
-                        .markdownTextStyle { FontSize(fontSize); BackgroundColor(.clear); ForegroundColor(.primary) }
+                        .markdownTheme(Theme.gitHub.text {
+                            FontSize(fontSize); BackgroundColor(nil); ForegroundColor(.primary)
+                        })
                         .markdownBlockStyle(\.codeBlock) { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
                         .markdownImageProvider(PlaceholderImageProvider())
                         .markdownInlineImageProvider(PlaceholderInlineImageProvider())

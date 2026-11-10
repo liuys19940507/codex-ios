@@ -32,8 +32,8 @@
 
 **Interfaces:** `SyncService.attach(threadId,attachmentId):Promise<Snapshot>`, `release(threadId,attachmentId):Promise<Json>`; commands `thread/attach`, `thread/release` with UUID `attachmentId`; Snapshot optional `readOnlyReason:string`. Read snapshot cache only while subscribed; thread/closed invalidates readiness. A queued release verifies identity after inflight work; another/new attachment wins over stale release. Attach attempts resume at response barrier, falling back to read-only history only on exact native writer-lock conflict. Writes translate that conflict into a useful explicit rejection.
 
-- [ ] Add failing tests: refresh rehydrates history, stale release ignored, release followed by snapshot reattaches loaded task, external writer fallback+write rejection, no interrupt/archive/stop calls.
-- [ ] Run focused Node tests and observe RED, implement minimal state/API, rerun tests+typecheck GREEN, commit.
+- [x] Add failing tests: refresh rehydrates history, stale release ignored, release followed by snapshot reattaches loaded task, external writer fallback+write rejection, no interrupt/archive/stop calls.
+- [x] Run focused Node tests and observe RED, implement minimal state/API, rerun tests+typecheck GREEN, commit.
 
 ### T2: iOS conversation refresh and leave
 
@@ -41,8 +41,8 @@
 
 **Interfaces:** `SessionStore.refreshThread(_ id:String) async`, `leaveThread(_ id:String) async`, `canControl:Bool`; selected attachment UUID is stable across refresh/background and replaced on navigation. NavigationStack path changes own selection/release; ConversationView refresh is always present and preserves ComposerModel. Subscription commands do not enter business-command draft/retry logic. Do not unsubscribe solely because a sheet opens.
 
-- [ ] Add failing tests for refresh/new history, leaving clears selection and sends exact release once, stale async leave vs new selection, external read-only disables input, background only restores subscriptions. Push Swift RED to macOS CI.
-- [ ] Implement, add toolbar refresh/progress and read-only banner, run cloud tests GREEN, commit.
+- [x] Add failing tests for refresh/new history, leaving clears selection and sends exact release once, stale async leave vs new selection, external read-only disables input, background only restores subscriptions. Push Swift RED to macOS CI.
+- [x] Implement, add toolbar refresh/progress and read-only banner, run cloud tests GREEN, commit.
 
 ### T3: Discover and synchronize existing projects
 
@@ -50,8 +50,17 @@
 
 **Interfaces:** optional RuntimeConfig.discoverProjects boolean; catalog refresh fetches paginated native thread/list for all sourceKinds, reconciles stable canonical absolute cwd roots into store and queries; static configured projects retained and configured IDs preferred on exact path. Project lists refresh before task lists and use correct directory labels.
 
-- [ ] Add RED tests for two unrelated directories, nested roots, identical basenames, case/slash stability, pagination, malformed/non-absolute cwd and default static scope.
-- [ ] Implement and run full Windows suite/typecheck; enable discovery in private local config only after real read-only verification. Commit.
+- [x] Add RED tests for two unrelated directories, nested roots, identical basenames, case/slash stability, pagination, malformed/non-absolute cwd and default static scope.
+- [x] Implement and run full Windows suite/typecheck; enable discovery in private local config only after real read-only verification. Commit.
+
+### T3b: Approved default PowerShell shared entry
+
+**Files:** scripts/windows/Start-CodexDefault.ps1, CodexRemote.Launcher.psm1, tests/Launcher.Tests.ps1; bridge/scripts/run-cli.ts, bridge/tests/run-cli.test.ts.
+
+**Interfaces:** `Get-CodexRemoteLaunchMode(CliArguments)` returns shared/native; `Get-CodexRemoteProfileContent(Source,LauncherPath,ConfigPath)` replaces only codex by parsed AST offsets and quotes path literals. Optional tokenFile in native launch request means native utilities never read the bridge token. Default wrapper passes `$args` as an array to the trusted script, retains current directory, and uses native mode for alternate CODEX_HOME.
+
+- [x] RED absent route/formatter and token-free runner rejection, then GREEN100Node/typecheck/Pester13 including explicit remote flags after a prompt.
+- [x] With explicit user approval, back up profile and change only codex; verify native version and an owned empty shared TUI in the original working directory. Shared native process stays alive after test client exits.
 
 ### T4: Rich messages and inspectable code/output/diffs
 
@@ -59,7 +68,7 @@
 
 **Interfaces:** raw Item.text retained; Markdown renderer/custom code block never transforms copy value and suppresses remote images; DiffDocument parses file/header/hunk lines into additions/deletions/partial markers with raw fallback.
 
-- [ ] Add RED fixtures/tests for Markdown/code fencing, empty known items, reasoning summaries, multi-file patches, +++ inside hunk, CRLF, Unicode and truncated patches.
+- [x] Add RED fixtures/tests for Markdown/code fencing, empty known items, reasoning summaries, multi-file patches, +++ inside hunk, CRLF, Unicode and truncated patches.
 - [ ] Implement rich text/theme, language+copy/full viewer, terminal tail preview and file summaries; verify cloud unit/UI/device build and screenshots. Commit.
 
 ### T5: Turn activity timeline and persistent composer

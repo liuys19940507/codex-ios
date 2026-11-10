@@ -19,7 +19,9 @@ final class RenderingUITests: XCTestCase {
         XCTAssertTrue(fullCode.isHittable)
         fullCode.tap()
         XCTAssertTrue(app.navigationBars["swift"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "print(greeting)")).firstMatch.exists)
+        let code = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "print(greeting)")).firstMatch
+        XCTAssertTrue(code.exists)
+        XCTAssertLessThan(code.frame.minY, app.navigationBars["swift"].frame.maxY + 80, "Short code should start at the top of the viewer")
         app.buttons["复制全部"].tap()
         XCTAssertTrue(app.buttons["已复制"].exists)
         capture(app, "code-viewer-\(dark ? "dark" : "light")")
