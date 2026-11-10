@@ -2,6 +2,8 @@
 
 Validated on Windows PowerShell, native Codex CLI **0.167.0**, Node **22.22.0**, 2026-11-08 UTC. These results concern an isolated, newly created project and our own app-server and CLI processes. No existing user task was stopped or migrated.
 
+此表是最初原生协议探针的历史检查点。2026-11-10的真实 iPhone 追加、命令审批、自动最终输出及多项目CLI验证已通过，当前结果见[端到端记录](end-to-end.md)。
+
 | Case | Result | Observation |
 | --- | --- | --- |
 | Late attachment to an active CLI turn | PASS | An independent authenticated RPC client read the exact CLI thread ID and in-progress turn ID; resuming rejoined them. |
@@ -42,7 +44,7 @@ One automated input attempt in the Codex TUI was not accepted during this sessio
 
 **PASS for completed-message replacement.** In the further paged trial, the late client received the full `item/completed` message and it exactly matched the original client's canonical message. This supports explicitly showing a partial prefix until a complete item arrives; it does not make the original immediate-recovery requirement pass.
 
-The [proposed behavior amendment](../superpowers/specs/2026-11-08-live-stream-recovery-amendment.md) is awaiting confirmation. W4 storage/sync and subsequent product-control work remain gated. The synchronous RPC response boundary itself passed its regression test; it cannot recover text absent from the upstream snapshot.
+The [behavior amendment](../superpowers/specs/2026-11-08-live-stream-recovery-amendment.md) was subsequently accepted and passed its real W4 implementation probe, recorded below. The synchronous RPC response boundary itself cannot recover text absent from the upstream snapshot.
 
 Reproduce using `bridge/scripts/probe-snapshot-race.ts` against an idle isolated thread. Create `probe-stream.json` in its temporary project containing `{"threadId":"<test-thread>","allowTestTurn":true}`. Supply `--url`, `--token-file`, `--project`, `--thread` and `--mode paged` or `--mode full`. The probe starts one text-generation turn, records counts without message bodies or tokens, and returns exit code 1 when immediate prefix recovery fails. It is intentionally excluded from automatic tests and never runs against a user thread by default.
 
