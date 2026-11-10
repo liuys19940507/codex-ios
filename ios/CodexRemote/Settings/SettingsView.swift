@@ -106,10 +106,21 @@ struct SettingsView: View {
                 if let message = lifecycle.message { Text(message) }
                 Button("重新同步连接") { Task { await lifecycle.setActive(true) } }
             }
+            Section {
+                NavigationLink("开源许可") {
+                    ScrollView {
+                        Text(licenseNotices).font(.footnote).textSelection(.enabled).padding()
+                    }.navigationTitle("开源许可").navigationBarTitleDisplayMode(.inline)
+                }
+            }
         }.navigationTitle("设置").task { await settings.load() }
     }
     private func choose(_ model: String?, _ reasoning: String?) {
         do { try settings.select(modelID: model, reasoning: reasoning); failure = nil }
         catch { failure = error.localizedDescription }
+    }
+    private var licenseNotices: String {
+        guard let url = Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt"), let text = try? String(contentsOf: url, encoding: .utf8) else { return "许可文件暂不可用。" }
+        return text
     }
 }

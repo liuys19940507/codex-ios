@@ -10,6 +10,9 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
         XCTAssertTrue(draft.isHittable)
+        let position = draft.frame.minY
+        app.swipeUp()
+        XCTAssertEqual(draft.frame.minY, position, accuracy: 2)
     }
     func testConversationHasRefreshAndRetainsDraftAfterRefresh() {
         let app = XCUIApplication()
