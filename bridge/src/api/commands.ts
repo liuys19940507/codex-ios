@@ -12,6 +12,14 @@ import { validatePendingResponse } from './responses.js';
 type Context={rpc:RpcClient;store:Store;sync:SyncService;operations:Operations;queries:Queries;projects:RuntimeConfig['projects'];features:Record<string,boolean>};
 export function createCommands(context:Context) {
   const {rpc,store,sync,operations,queries,projects,features}=context;
+  const attachmentWork=new Map<string,Promise<Operation>>();
+  function attachmentTask(threadId:string,work:()=>Promise<Operation>):Promise<Operation> {
+    const previous=attachmentWork.get(threadId)??Promise.resolve();
+    const next=previous.catch(()=>{}).then(work);
+    attachmentWork.set(threadId,next);
+    void next.finally(()=>{if(attachmentWork.get(threadId)===next)attachmentWork.delete(threadId);}).catch(()=>{});
+    return next;
+  }
   const conflict=(message:string):never=>{throw new ApiError(409,'state_conflict',message);};
   const capability=(name:string):void=>{if(!features[name])throw new ApiError(409,'capability_unavailable',`${name} is not enabled by this server`);};
   const input=(text:Json|undefined)=>[{type:'text',text:String(text),text_elements:[]}];
@@ -26,10 +34,13 @@ export function createCommands(context:Context) {
     const existing=operations.lookup(command);if(existing)return existing;
     if(command.method==='thread/attach'||command.method==='thread/release') {
       const threadId=String(p.threadId),attachmentId=String(p.attachmentId);
-      await queries.authorizeThread(threadId);
-      return operations.executeOnce(command,async()=>command.method==='thread/attach'
-        ?{readOnlyReason:(await sync.attach(threadId,attachmentId)).readOnlyReason??null}
-        :sync.release(threadId,attachmentId));
+      // Reserve order before authorization can yield to another selection.
+      return attachmentTask(threadId,async()=>{
+        await queries.authorizeThread(threadId);
+        return operations.executeOnce(command,async()=>command.method==='thread/attach'
+          ?{readOnlyReason:(await sync.attach(threadId,attachmentId)).readOnlyReason??null}
+          :sync.release(threadId,attachmentId));
+      });
     }
     let snapshot:Snapshot|undefined;
     if(command.method==='task/create') {

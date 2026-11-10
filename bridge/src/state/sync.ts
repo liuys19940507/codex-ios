@@ -14,6 +14,7 @@ export class SyncService {
   private readonly inflight=new Map<string,Promise<Snapshot>>();
   private readonly buffers=new Map<string,SourceEvent[]>();
   private readonly attachments=new Map<string,string>();
+  private readonly releasedAttachments=new Set<string>();
   private readonly attachmentWork=new Map<string,Promise<unknown>>();
   private readonly readOnly=new Map<string,string>();
   private readonly listeners=new Set<(event:Envelope)=>void>();
@@ -88,6 +89,7 @@ export class SyncService {
   }
   attach(threadId:string,attachmentId:string):Promise<Snapshot> {
     return this.attachmentTask(threadId,async()=>{
+      if(this.releasedAttachments.has(`${threadId}:${attachmentId}`))throw new ApiError(409,'attachment_released','This selection has already been released; open the conversation again');
       this.attachments.set(threadId,attachmentId);
       try {return await this.resumeForWrite(threadId);}
       catch(error) {
@@ -98,6 +100,8 @@ export class SyncService {
   }
   release(threadId:string,attachmentId:string):Promise<Json> {
     return this.attachmentTask(threadId,async()=>{
+      // UUIDs identify one selection, so a delayed delivery cannot revive it.
+      this.releasedAttachments.add(`${threadId}:${attachmentId}`);
       if(this.attachments.get(threadId)!==attachmentId)return {status:'notSubscribed'};
       await this.inflight.get(threadId)?.catch(()=>{});
       try {
