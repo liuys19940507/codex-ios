@@ -38,6 +38,7 @@ targets:
         buildPhase: resources
     dependencies:
       - target: CodexRemote
+      - package: MarkdownUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.liuys.codexremote.tests
