@@ -24,7 +24,7 @@ struct ConversationView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 20) {
                     if let snapshot = session.snapshot, snapshot.thread.id == threadID {
                         if let reason = snapshot.readOnlyReason { Label(reason, systemImage: "desktopcomputer").font(.callout).foregroundStyle(.secondary) }
                         if snapshot.itemsCursor != nil {
