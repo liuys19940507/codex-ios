@@ -82,7 +82,7 @@ export async function startBridge(config: RuntimeConfig, dependencies: Dependenc
       rpc = client;
       sync = createSync(requireValue(store), client);
       sync.onEvent(event => { for (const listener of listeners) listener(event); });
-      queries = createQueries({ rpc: client, store: requireValue(store), sync, projects: config.projects });
+      queries = createQueries({ rpc: client, store: requireValue(store), sync, projects: config.projects,discoverProjects:config.discoverProjects });
       commands = createCommands({ rpc: client, store: requireValue(store), sync, operations: requireValue(operations), queries, projects: config.projects, features });
       client.onClose(() => {
         if (closed || rpc !== client) return;

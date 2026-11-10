@@ -91,7 +91,7 @@ export function createApiServer(context: ApiContext) {
     if (!context.available()) throw new ApiError(503, 'upstream_unavailable', 'Codex is temporarily unavailable');
     let result: unknown;
     if (method === 'GET' && path === '/v1/info') { parameters(url, []); result = context.info; }
-    else if (method === 'GET' && path === '/v1/projects') { parameters(url, []); result = context.queries.queryProjects(); }
+    else if (method === 'GET' && path === '/v1/projects') { parameters(url, []); result = await context.queries.queryProjects(); }
     else if (method === 'GET' && path === '/v1/models') { parameters(url, []); result = await context.queries.queryModels(); }
     else if (method === 'GET' && path === '/v1/threads') result = await context.queries.queryThreads(parameters(url, ['projectId', 'query', 'cursor']));
     else if (method === 'POST' && path === '/v1/commands') { parameters(url, []); result = await context.commands.dispatch(validateCommand(await body(request))); }

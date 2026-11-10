@@ -6,9 +6,10 @@ import type { RpcClient } from '../protocol/rpc-client.js';
 import type { Store } from '../state/store.js';
 import type { SyncService } from '../state/sync.js';
 import { object, projectItem, summary } from '../state/reducer.js';
+import { createProjectCatalog, sourceKinds } from './project-catalog.js';
 
-export type QueryContext={rpc:RpcClient;store:Store;sync:SyncService;projects:RuntimeConfig['projects']};
-export const sourceKinds=['cli','vscode','exec','appServer','subAgent','subAgentReview','subAgentCompact','subAgentThreadSpawn','subAgentOther','unknown'];
+export type QueryContext={rpc:RpcClient;store:Store;sync:SyncService;projects:RuntimeConfig['projects'];discoverProjects?:boolean};
+export {sourceKinds};
 const encode=(value:unknown)=>Buffer.from(JSON.stringify(value)).toString('base64url');
 function decode(cursor:string):Record<string,any> {
   try {
@@ -20,6 +21,8 @@ function decode(cursor:string):Record<string,any> {
 }
 export function createQueries(context:QueryContext) {
   const {rpc,store,sync,projects}=context;store.setProjects(projects);
+  const catalog=createProjectCatalog(rpc,projects,context.discoverProjects);
+  async function refreshProjects() {const result=await catalog.refresh();store.setProjects(result);return result;}
   async function authorizeThread(threadId:string):Promise<Record<string,any>> {
     if(!threadId||threadId.length>256)throw new ApiError(400,'invalid_request','Invalid thread id');
     const response=object(await rpc.requestAtBarrier('thread/read',{threadId,includeTurns:false},value=>{
@@ -29,10 +32,12 @@ export function createQueries(context:QueryContext) {
       if(thread.id===threadId&&store.project(String(thread.cwd??'')))sync.refreshMetadata(thread);
     })),thread=object(response.thread);
     if(thread.id!==threadId)throw new ApiError(503,'upstream_invalid','Thread identity mismatch');
+    if(context.discoverProjects) {catalog.includeDirectory(thread.cwd);store.setProjects(catalog.all());}
     summary(thread,store);return thread;
   }
   async function queryThreads(input:{projectId?:string;query?:string;cursor?:string}={}) {
-    const selected=input.projectId?[requireProject(projects,input.projectId)]:projects;
+    const available=context.discoverProjects?await refreshProjects():catalog.all();
+    const selected=input.projectId?[requireProject(available,input.projectId)]:available;
     const query=input.query??'';
     if(Buffer.byteLength(query,'utf8')>1024)throw new ApiError(400,'invalid_request','Search text is too long');
     const filter=createHash('sha256').update(JSON.stringify([input.projectId??null,query])).digest('hex');
@@ -42,12 +47,14 @@ export function createQueries(context:QueryContext) {
       if(value.kind!=='threads'||value.filter!==filter||typeof value.cursor!=='string')throw new ApiError(400,'invalid_cursor','Cursor belongs to another search');
       cursor=value.cursor;
     }
-    const result=object(await rpc.request('thread/list',{cwd:selected.map(project=>project.path),searchTerm:query||null,cursor,limit:50,
+    const result=object(await rpc.request('thread/list',{...(!context.discoverProjects||input.projectId?{cwd:selected.map(project=>project.path)}:{}),searchTerm:query||null,cursor,limit:50,
       sortKey:'updated_at',sortDirection:'desc',sourceKinds,modelProviders:[],useStateDbOnly:true}));
     const data:ThreadSummary[]=[];
     for(const raw of Array.isArray(result.data)?result.data:[]) {
-      const thread=object(raw),project=store.project(String(thread.cwd??''));
-      if(!project||!selected.some(p=>p.id===project.id))continue;
+      const thread=object(raw);
+      if(context.discoverProjects){catalog.includeDirectory(thread.cwd);store.setProjects(catalog.all());}
+      const project=store.project(String(thread.cwd??''));
+      if(!project||(!context.discoverProjects||input.projectId)&&!selected.some(p=>p.id===project.id))continue;
       data.push(summary(thread,store));
     }
     return {data,nextCursor:typeof result.nextCursor==='string'?encode({kind:'threads',filter,cursor:result.nextCursor}):null};
@@ -97,6 +104,6 @@ export function createQueries(context:QueryContext) {
     }
     throw new ApiError(503,'upstream_invalid','Model catalog exceeded its page limit');
   }
-  return {queryThreads,querySnapshot,queryItems,queryModels,authorizeThread,queryProjects:()=>projects.map(project=>({...project}))};
+  return {queryThreads,querySnapshot,queryItems,queryModels,authorizeThread,queryProjects:()=>context.discoverProjects?refreshProjects():catalog.all()};
 }
 export type Queries=ReturnType<typeof createQueries>;

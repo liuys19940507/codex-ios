@@ -9,6 +9,7 @@ export interface RuntimeConfig {
   bridgeHost:string;
   bridgePort:number;
   projects:{id:string;name:string;path:string}[];
+  discoverProjects?:boolean;
 }
 
 export function validateConfig(value:unknown):RuntimeConfig {
@@ -18,6 +19,7 @@ export function validateConfig(value:unknown):RuntimeConfig {
   if(typeof c.stateDir!=='string' || !isAbsolute(c.stateDir)) throw new Error('stateDir must be absolute');
   for(const port of [c.codexPort,c.bridgePort]) if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid configured port');
   if(c.codexPort===c.bridgePort) throw new Error('Codex and bridge ports must differ');
+  if(c.discoverProjects!==undefined&&typeof c.discoverProjects!=='boolean')throw new Error('discoverProjects must be boolean');
   if(typeof c.bridgeHost!=='string'||isIP(c.bridgeHost)!==4||c.bridgeHost==='0.0.0.0') throw new Error('Configure a specific local EasyTier IPv4 address');
   if(!Array.isArray(c.projects)||c.projects.length===0) throw new Error('Configure at least one project');
   const ids=new Set<string>();

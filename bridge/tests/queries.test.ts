@@ -10,7 +10,7 @@ import { connectRpc } from '../src/protocol/rpc-client.js';
 import { ApiError } from '../src/api/validation.js';
 import { fakeServer, handshake } from './support/fake-server.js';
 
-async function fixture(t:TestContext,options:{loaded?:boolean}={}) {
+async function fixture(t:TestContext,options:{loaded?:boolean;discover?:boolean}={}) {
   const dir=await mkdtemp(join(tmpdir(),'codex-query-')),calls:{method:string;params:any}[]=[];
   const projects=[{id:'project',name:'Controlled',path:'C:/controlled/project'}];
   const parent={id:'parent',cwd:projects[0]!.path,name:'Parent',preview:'',status:{type:'notLoaded'},parentThreadId:null,turns:[]};
@@ -28,8 +28,17 @@ async function fixture(t:TestContext,options:{loaded?:boolean}={}) {
   });
   const rpc=await connectRpc(server.url,'test'),store=openStore(join(dir,'state.sqlite')),sync=createSync(store,rpc);
   t.after(async()=>{sync.close();await rpc.close();await server.close();store.close();await rm(dir,{recursive:true,force:true});});
-  const queries=createQueries({rpc,store,sync,projects});return {queries,calls,store,parent};
+  const queries=createQueries({rpc,store,sync,projects,discoverProjects:options.discover});return {queries,calls,store,parent};
 }
+
+test('opt_in_discovery_exposes_other_working_directories_and_all_project_tasks',async t=>{
+  const f=await fixture(t,{discover:true});
+  const projects=await f.queries.queryProjects();assert.equal(projects.length,2);
+  const page=await f.queries.queryThreads();assert.deepEqual(page.data.map(t=>t.id),['parent','child','foreign']);
+  const other=projects.find(p=>p.id!=='project')!;
+  const selected=await f.queries.queryThreads({projectId:other.id});assert.deepEqual(selected.data.map(t=>t.id),['foreign']);
+  assert.equal((await f.queries.querySnapshot('foreign')).thread.projectId,other.id);
+});
 
 test('project_scoped_listing_filters_foreign_threads_and_keeps_child_parent_identity',async t=>{
   const f=await fixture(t),page=await f.queries.queryThreads({projectId:'project',query:'Parent'});

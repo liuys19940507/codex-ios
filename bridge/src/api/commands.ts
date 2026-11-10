@@ -33,7 +33,7 @@ export function createCommands(context:Context) {
     }
     let snapshot:Snapshot|undefined;
     if(command.method==='task/create') {
-      requireProject(projects,String(p.projectId));
+      requireProject(await queries.queryProjects(),String(p.projectId));
       if(p.reasoning&&!p.model)throw new ApiError(400,'invalid_model','Select a model before its reasoning effort');
       if(p.model) {
         const model=(await queries.queryModels()).find(model=>model.id===p.model);
@@ -53,7 +53,7 @@ export function createCommands(context:Context) {
     }
     return operations.executeOnce(command,async()=>{
       if(command.method==='task/create') {
-        const project=requireProject(projects,String(p.projectId));
+        const project=requireProject(await queries.queryProjects(),String(p.projectId));
         const started=object(await rpc.request('thread/start',{cwd:project.path,...(p.model?{model:p.model}:{})}));
         const threadId=object(started.thread).id;
         if(typeof threadId!=='string')throw new Error('Thread creation response has no identity');
