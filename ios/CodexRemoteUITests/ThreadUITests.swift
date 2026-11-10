@@ -1,6 +1,51 @@
 import XCTest
 
 final class ThreadUITests: XCTestCase {
+    func testCommandApprovalIsActionableWithProcessCollapsedAboveComposer() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-workspace", "--ui-test-activity", "--ui-test-pending"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
+        app.staticTexts["Fixture task"].tap()
+        XCTAssertTrue(app.textViews["任务草稿"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["任务已完成"].waitForExistence(timeout: 10))
+        let process = app.buttons["查看处理过程"]
+        reveal(process, in: app, up: false)
+        XCTAssertFalse(app.staticTexts["controlled fixture command"].exists, "Tool details should remain collapsed")
+        let allow = app.buttons["允许执行一次"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 5))
+        reveal(allow, in: app, up: true)
+        XCTAssertTrue(allow.isEnabled)
+        XCTAssertLessThanOrEqual(allow.frame.maxY, app.textViews["任务草稿"].frame.minY)
+        allow.tap()
+        app.buttons["查看最新输出"].tap()
+        XCTAssertTrue(app.staticTexts["APPROVAL_ACCEPTED_ONCE"].waitForExistence(timeout: 10))
+        XCTAssertFalse(allow.exists)
+    }
+
+    func testArrivingOutputPreservesOlderHistoryUntilLatestIsRequested() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-workspace", "--ui-test-activity", "--ui-test-events"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
+        app.staticTexts["Fixture task"].tap()
+        let draft = app.textViews["任务草稿"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["任务已完成"].waitForExistence(timeout: 10))
+        let process = app.buttons["查看处理过程"]
+        reveal(process, in: app, up: false)
+        let anchor = process.frame.minY, composer = draft.frame.minY
+        let incoming = app.buttons["接收测试输出"]
+        XCTAssertTrue(incoming.waitForExistence(timeout: 5))
+        incoming.tap()
+        let delivered = expectation(for: NSPredicate(format: "value == %@", "事件 1"), evaluatedWith: incoming)
+        wait(for: [delivered], timeout: 10)
+        XCTAssertEqual(process.frame.minY, anchor, accuracy: 3)
+        XCTAssertEqual(draft.frame.minY, composer, accuracy: 2)
+        app.buttons["查看最新输出"].tap()
+        XCTAssertTrue(app.staticTexts["LIVE_OUTPUT_1"].waitForExistence(timeout: 10))
+    }
+
     func testDraftIsVisibleWhileReadingLongTaskOutput() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-workspace", "--ui-test-activity"]

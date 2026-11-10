@@ -29,6 +29,43 @@ test('attachment_commands_are_scoped_idempotent_and_do_not_interrupt_work',async
   assert.equal(f.calls.some(c=>['turn/interrupt','thread/archive'].includes(c.method)),false);
   await assert.rejects(f.commands.dispatch(command('thread/attach',{threadId:'thread',attachmentId:'invalid'})),/UUID/);
 });
+test('delayed_authorization_cannot_replace_a_newer_attachment_or_release_its_screen',async t=>{
+  const f=await fixture(t),oldId=randomUUID(),newId=randomUUID();
+  const authorize=f.queries.authorizeThread;
+  let entered!:()=>void,release!:()=>void;
+  const waiting=new Promise<void>(resolve=>{entered=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+  let first=true;
+  f.queries.authorizeThread=async id=>{if(first){first=false;entered();await held;}return authorize(id);};
+  const old=f.commands.dispatch(command('thread/attach',{threadId:'thread',attachmentId:oldId}));
+  await waiting;
+  const current=f.commands.dispatch(command('thread/attach',{threadId:'thread',attachmentId:newId}));
+  await delay(20);release();
+  await Promise.all([old,current]);
+  await f.commands.dispatch(command('thread/release',{threadId:'thread',attachmentId:oldId}));
+  assert.equal(f.calls.filter(c=>c.method==='thread/unsubscribe').length,0,'old screen must not unsubscribe the newer selection');
+  await f.commands.dispatch(command('thread/release',{threadId:'thread',attachmentId:newId}));
+  assert.equal(f.calls.filter(c=>c.method==='thread/unsubscribe').length,1);
+});
+test('leave_during_delayed_authorization_releases_the_pending_selection',async t=>{
+  const f=await fixture(t),attachmentId=randomUUID(),authorize=f.queries.authorizeThread;
+  let entered!:()=>void,release!:()=>void;
+  const waiting=new Promise<void>(resolve=>{entered=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+  let first=true;
+  f.queries.authorizeThread=async id=>{if(first){first=false;entered();await held;}return authorize(id);};
+  const attaching=f.commands.dispatch(command('thread/attach',{threadId:'thread',attachmentId}));
+  await waiting;
+  const leaving=f.commands.dispatch(command('thread/release',{threadId:'thread',attachmentId}));
+  await delay(20);release();await Promise.all([attaching,leaving]);
+  assert.equal(f.calls.filter(c=>c.method==='thread/unsubscribe').length,1,'navigation away must not leave a late subscription held');
+});
+test('release_before_a_delayed_attach_arrives_cannot_resurrect_the_closed_selection',async t=>{
+  const f=await fixture(t),attachmentId=randomUUID();
+  const resumes=f.calls.filter(c=>c.method==='thread/resume').length;
+  await f.commands.dispatch(command('thread/release',{threadId:'thread',attachmentId}));
+  const late=await f.commands.dispatch(command('thread/attach',{threadId:'thread',attachmentId}));
+  assert.equal(late.state,'failed');
+  assert.equal(f.calls.filter(c=>c.method==='thread/resume').length,resumes);
+});
 async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolean;streamStart?:boolean}={}) {
   const dir=await mkdtemp(join(tmpdir(),'codex-command-')),projects=[{id:'project',name:'Controlled',path:'C:/controlled/project'}];
   const active=options.active??true;
@@ -72,7 +109,7 @@ async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolea
     while(!store.snapshot('thread').pending.length&&Date.now()<deadline)await delay(5);
     return store.snapshot('thread').pending[0]!;
   }
-  return {commands,calls,responses,store,features,pending,emit};
+  return {commands,calls,responses,store,features,pending,emit,queries};
 }
 
 test('unconfigured_project_and_policy_override_are_rejected_before_task_creation',async t=>{
