@@ -188,7 +188,7 @@ enum CommandParameters {
         return params
     }
     static func response(request: Pending, snapshot: Snapshot, response: JSONValue, features: [String: Bool]) throws -> [String: JSONValue] {
-        guard request.state == .pending, request.threadId == snapshot.thread.id, request.turnId == snapshot.thread.activeTurnId else { throw ClientCommandError(message: "此请求已处理或所属轮次已变化，请刷新。") }
+        guard request.state == .pending, snapshot.pending.contains(request), request.threadId == snapshot.thread.id, request.turnId == snapshot.thread.activeTurnId else { throw ClientCommandError(message: "此请求已处理或所属轮次已变化，请刷新。") }
         let feature: String
         switch request.kind {
         case .command: feature = "approvals"

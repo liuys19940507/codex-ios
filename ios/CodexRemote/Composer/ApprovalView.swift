@@ -95,7 +95,11 @@ struct ApprovalView: View {
     }
     private func respond(_ response: JSONValue) {
         Task {
-            let result = await sender.respond(request: request, snapshot: snapshot, response: response, features: features)
+            guard let current = session.snapshot, let latest = current.pending.first(where: { $0.id == request.id }), latest == request else {
+                if session.snapshot?.thread.id == request.threadId { await session.selectThread(request.threadId) }
+                return
+            }
+            let result = await sender.respond(request: latest, snapshot: current, response: response, features: features)
             if result.state == .accepted && session.snapshot?.thread.id == request.threadId { await session.selectThread(request.threadId) }
         }
     }

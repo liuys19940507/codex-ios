@@ -40,6 +40,17 @@ final class CommandTests: XCTestCase {
     }
 
     @MainActor
+    func testExactOfferedApprovalInCurrentSnapshotPostsOnce() async throws {
+        let f = try fixture()
+        let result = await f.sender.respond(request: pending(), snapshot: active(), response: .object(["decision": .string("accept")]), features: ["approvals": true])
+        XCTAssertEqual(result.state, .accepted)
+        let posts = await f.transport.posts
+        XCTAssertEqual(posts.count, 1)
+        XCTAssertEqual(posts.first?.params["requestId"], .string("request"))
+        XCTAssertEqual(posts.first?.params["response"], .object(["decision": .string("accept")]))
+    }
+
+    @MainActor
     func testApprovalRejectsUnrequestedDecision() async throws {
         let f = try fixture()
         let result = await f.sender.respond(request: pending(), snapshot: active(), response: .object(["decision": .string("acceptForSession")]), features: ["approvals": true])
@@ -156,7 +167,7 @@ final class CommandTests: XCTestCase {
 
 private func active() -> Snapshot {
     Snapshot(cursor: Cursor(epoch: "epoch", seq: 0), thread: ThreadSummary(id: "thread", projectId: "project", title: "Controlled", status: "active", activeTurnId: "turn", parentId: nil),
-             items: [], itemsCursor: nil, pending: [], policy: Snapshot.Policy(approvalPolicy: nil, sandbox: nil))
+             items: [], itemsCursor: nil, pending: [pending()], policy: Snapshot.Policy(approvalPolicy: nil, sandbox: nil))
 }
 private func pending(state: Pending.State = .pending) -> Pending {
     Pending(id: "request", threadId: "thread", turnId: "turn", kind: .command, prompt: "Controlled", options: .object(["availableDecisions": .array([.string("accept"), .string("cancel")])]), state: state)
