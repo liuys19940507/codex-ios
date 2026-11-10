@@ -43,5 +43,6 @@ jobs:
             build/CodexRemote-unsigned.ipa
             build/CodexRemote-unsigned.ipa.sha256
             build/commit.txt
+            build/Package.resolved
           if-no-files-found: error
           retention-days: 14

@@ -10,6 +10,10 @@ settings:
     CODE_SIGNING_ALLOWED: NO
     MARKETING_VERSION: '0.1.0'
     CURRENT_PROJECT_VERSION: '4'
+packages:
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    exactVersion: 2.4.1
 targets:
   CodexRemote:
     type: application
@@ -17,6 +21,8 @@ targets:
     sources:
       - path: CodexRemote
         excludes: [Resources/Info.plist]
+    dependencies:
+      - package: MarkdownUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.liuys.codexremote

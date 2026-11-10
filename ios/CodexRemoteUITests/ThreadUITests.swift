@@ -1,6 +1,16 @@
 import XCTest
 
 final class ThreadUITests: XCTestCase {
+    func testDraftIsVisibleWhileReadingLongTaskOutput() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-workspace", "--ui-test-activity"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
+        app.staticTexts["Fixture task"].tap()
+        let draft = app.textViews["任务草稿"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        XCTAssertTrue(draft.isHittable)
+    }
     func testConversationHasRefreshAndRetainsDraftAfterRefresh() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-workspace"]

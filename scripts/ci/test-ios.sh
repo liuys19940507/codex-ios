@@ -3,6 +3,7 @@ set -euo pipefail
 mkdir -p build
 xcodebuild -version
 xcodegen generate --spec ios/project.yml
+source scripts/ci/prepare-swift-packages.sh
 simulator_id=''
 cleanup() {
   if [[ -n "$simulator_id" ]]; then
@@ -29,4 +30,4 @@ xcrun simctl boot "$simulator_id"
 xcrun simctl bootstatus "$simulator_id" -b
 xcodebuild test -project ios/CodexRemote.xcodeproj -scheme CodexRemote \
   -destination "platform=iOS Simulator,id=$simulator_id" \
-  -resultBundlePath build/CodexRemote.xcresult CODE_SIGNING_ALLOWED=NO
+  -resultBundlePath build/CodexRemote.xcresult "${swift_package_arguments[@]}" CODE_SIGNING_ALLOWED=NO

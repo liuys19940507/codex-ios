@@ -15,7 +15,9 @@ struct ActivityPresentation {
             for value in values { if let id = value.stringValue, !id.isEmpty, !ids.contains(id) { ids.append(id) } }
         }
         var body = item.text
-        if body.isEmpty && !["fileChange", "collabAgentToolCall"].contains(item.kind) { body = item.data.formatted }
+        let known = ["userMessage", "agentMessage", "plan", "reasoning", "commandExecution", "fileChange", "diff", "collabAgentToolCall", "mcpToolCall", "dynamicToolCall"]
+        if body.isEmpty && !known.contains(item.kind) { body = item.data.formatted }
+        if item.kind == "mcpToolCall", body.isEmpty { body = [data["result"], data["error"]].compactMap { $0 == .null ? nil : $0?.formatted }.joined(separator: "\n") }
         return ActivityPresentation(title: titles[item.kind] ?? "工具活动：\(item.kind)", body: body, status: data["status"]?.stringValue, kind: item.kind, childThreadIDs: ids)
     }
     static func chunks(_ text: String, limit: Int = 2048) -> [String] {
@@ -33,15 +35,31 @@ struct ActivityPresentation {
 struct ActivityView: View {
     let item: Item
     let partial: Bool
-    @State private var expanded = false
+    var onDraft: ((String) -> Void)? = nil
     @State private var copied = false
     private var presentation: ActivityPresentation { ActivityPresentation.make(item: item) }
-    private var isMessage: Bool { ["userMessage", "agentMessage", "plan", "reasoning"].contains(item.kind) }
     var body: some View {
+        Group {
+            if item.kind == "userMessage" {
+                HStack {
+                    Spacer(minLength: 36)
+                    Text(item.text).textSelection(.enabled).padding(12)
+                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                }
+            } else { content }
+        }
+        .contextMenu {
+            Button("复制消息") { UIPasteboard.general.string = item.text.isEmpty ? presentation.body : item.text }
+            if !item.text.isEmpty, let onDraft { Button("追加到草稿") { onDraft(item.text) } }
+        }
+    }
+    private var content: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(presentation.title).font(.caption.weight(.semibold))
-                if let status = presentation.status { Text(status).font(.caption).foregroundStyle(.secondary) }
+            if item.kind != "agentMessage" {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.kind == "reasoning" ? ReasoningSummary.make(item.text).title : presentation.title).font(.caption.weight(.semibold))
+                    if let status = presentation.status { Text(Self.status(status)).font(.caption).foregroundStyle(status == "failed" ? .red : .secondary) }
+                }
             }
             if let command = item.data.objectValue["command"]?.stringValue { Text(command).font(.callout.monospaced()).textSelection(.enabled) }
             if item.kind == "fileChange", case .array(let changes) = item.data.objectValue["changes"] {
@@ -50,29 +68,28 @@ struct ActivityView: View {
                 }
             } else if item.kind == "diff" {
                 DiffView(text: presentation.body, path: "本轮累计差异")
+            } else if item.kind == "commandExecution" {
+                CodeOutputView(text: item.text, title: "命令输出", tail: true)
+            } else if item.kind == "plan", case .array(let steps) = item.data.objectValue["steps"], !steps.isEmpty {
+                ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
+                    let data = step.objectValue
+                    Label(data["step"]?.stringValue ?? "步骤", systemImage: data["status"]?.stringValue == "completed" ? "checkmark.circle.fill" : data["status"]?.stringValue == "inProgress" ? "circle.dotted" : "circle")
+                        .font(.callout)
+                }
             } else if !presentation.body.isEmpty {
-                if !isMessage || presentation.body.count > 4096 {
-                    HStack {
-                        Button(expanded ? "收起输出" : "展开输出") { expanded.toggle() }
-                        Button("复制全部输出") { UIPasteboard.general.string = presentation.body; copied = true }
-                    }.buttonStyle(.borderless)
-                    if copied { Text("已复制").font(.caption).foregroundStyle(.secondary) }
-                    if expanded { output }
-                    else if isMessage { Text(String(presentation.body.prefix(2048))).textSelection(.enabled) }
-                } else { output }
+                if ["agentMessage", "reasoning", "plan"].contains(item.kind) {
+                    RichMessageView(text: item.kind == "reasoning" ? ReasoningSummary.make(item.text).body : presentation.body)
+                } else { CodeOutputView(text: presentation.body, title: presentation.title) }
             }
             if case .number(let code) = item.data.objectValue["exitCode"] { Text("退出码 \(Int(code))").font(.caption).foregroundStyle(.secondary) }
+            if case .number(let duration) = item.data.objectValue["durationMs"] { Text(String(format: "耗时 %.1f 秒", duration / 1000)).font(.caption).foregroundStyle(.secondary) }
             if item.data.objectValue["prefixComplete"] == .bool(false) {
                 Text(partial ? "部分输出，结束后自动补齐" : "此段输出可能不完整").font(.caption).foregroundStyle(.secondary)
             }
             ForEach(presentation.childThreadIDs, id: \.self) { ChildThreadView(threadID: $0) }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
-    private var output: some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(ActivityPresentation.chunks(presentation.body).enumerated()), id: \.offset) { _, text in
-                Text(text).font(isMessage ? .body : .callout.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
+    static func status(_ value: String) -> String {
+        ["completed": "已完成", "inProgress": "执行中", "failed": "失败", "declined": "已拒绝", "interrupted": "已中断", "unknown": "状态未知"][value] ?? value
     }
 }

@@ -3,9 +3,11 @@ set -euo pipefail
 mkdir -p build
 xcodebuild -version
 xcodegen generate --spec ios/project.yml
+source scripts/ci/prepare-swift-packages.sh
 xcodebuild archive -project ios/CodexRemote.xcodeproj -scheme CodexRemote \
   -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
-  -archivePath build/CodexRemote.xcarchive CODE_SIGNING_ALLOWED=NO
+  -archivePath build/CodexRemote.xcarchive "${swift_package_arguments[@]}" CODE_SIGNING_ALLOWED=NO
+cp ios/CodexRemote.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved build/Package.resolved
 app="$PWD/build/CodexRemote.xcarchive/Products/Applications/CodexRemote.app"
 test -f "$app/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = 'com.liuys.codexremote'
