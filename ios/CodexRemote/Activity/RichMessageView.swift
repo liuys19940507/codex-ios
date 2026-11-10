@@ -16,6 +16,18 @@ struct RichMessageView: View {
     @State private var showingAll = false
     // MarkdownUI's ScaledFontSizeModifier applies Dynamic Type itself.
     private let fontSize: CGFloat = 17
+    // A whole-theme environment value masks outer per-block overrides.
+    // Compose all styles first so the native table is actually installed.
+    private var messageTheme: Theme {
+        Theme.gitHub.text {
+            FontSize(fontSize); BackgroundColor(nil); ForegroundColor(.primary)
+        }
+        .codeBlock { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
+        .table { config in
+            NativeMarkdownTableView(html: config.content.renderHTML(), fallback: config.content.renderMarkdown())
+                .markdownMargin(top: 0, bottom: 16)
+        }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(rendering.blocks) { block in
@@ -24,14 +36,7 @@ struct RichMessageView: View {
                     if !block.complete { Text("代码块未闭合").font(.caption).foregroundStyle(.secondary) }
                 } else {
                     Markdown(String(block.content.prefix(16000)))
-                        .markdownTheme(Theme.gitHub.text {
-                            FontSize(fontSize); BackgroundColor(nil); ForegroundColor(.primary)
-                        })
-                        .markdownBlockStyle(\.codeBlock) { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
-                        .markdownBlockStyle(\.table) { config in
-                            NativeMarkdownTableView(html: config.content.renderHTML(), fallback: config.content.renderMarkdown())
-                                .markdownMargin(top: 0, bottom: 16)
-                        }
+                        .markdownTheme(messageTheme)
                         .markdownImageProvider(PlaceholderImageProvider())
                         .markdownInlineImageProvider(PlaceholderInlineImageProvider())
                         .textSelection(.enabled)
