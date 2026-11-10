@@ -4,20 +4,14 @@ import SwiftUI
 struct ConversationView: View {
     let threadID: String
     let serverID: UUID
-    let drafts: DraftStore
     @EnvironmentObject private var session: SessionStore
-    @State private var draft: String
-    @State private var draftMessage: String?
-    @State private var writable: Bool
+    @EnvironmentObject private var sender: CommandSender
+    @EnvironmentObject private var connection: ConnectionModel
+    @StateObject private var composer: ComposerModel
+    @State private var title = "会话"
     init(threadID: String, serverID: UUID, drafts: DraftStore = DraftStore()) {
-        self.threadID = threadID; self.serverID = serverID; self.drafts = drafts
-        do {
-            _draft = State(initialValue: try drafts.read(serverID: serverID, threadID: threadID))
-            _draftMessage = State(initialValue: nil); _writable = State(initialValue: true)
-        } catch {
-            _draft = State(initialValue: ""); _writable = State(initialValue: false)
-            _draftMessage = State(initialValue: "无法读取本地草稿，原文件已保留。")
-        }
+        self.threadID = threadID; self.serverID = serverID
+        _composer = StateObject(wrappedValue: ComposerModel(serverID: serverID, threadID: threadID, drafts: drafts))
     }
     var body: some View {
         ScrollViewReader { proxy in
@@ -47,10 +41,7 @@ struct ConversationView: View {
                             .frame(maxWidth: .infinity, alignment: .leading).id(item.id)
                         }
                         ForEach(snapshot.pending) { request in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Label("等待处理", systemImage: "questionmark.circle")
-                                Text(request.prompt).textSelection(.enabled)
-                            }
+                            ApprovalView(request: request, snapshot: snapshot, features: connection.info?.features ?? [:])
                         }
                     } else if session.connectionState == .syncing || session.connectionState == .connecting { ProgressView("正在同步会话…") }
                     if let message = session.message {
@@ -59,32 +50,28 @@ struct ConversationView: View {
                             Button("重新同步") { Task { await session.selectThread(threadID) } }
                         }
                     }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("草稿").font(.headline)
-                        TextEditor(text: $draft).frame(minHeight: 120, maxHeight: 220)
-                            .padding(4).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                            .accessibilityIdentifier("任务草稿").disabled(!writable)
-                        Text(draftMessage ?? "草稿保存在本机，尚未提交。")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                    ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: connection.info?.features ?? [:])
+                    OperationStatusView()
                     Color.clear.frame(height: 1).id("conversation-end")
                 }.padding()
             }
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    if connection.info?.features["interrupt"] == true, let current = session.snapshot, current.thread.id == threadID, let turn = current.thread.activeTurnId {
+                        Button(role: .destructive) {
+                            Task { _ = await sender.submit(method: .interrupt, params: ["threadId": .string(threadID), "turnId": .string(turn)]) }
+                        } label: { Image(systemName: "stop.circle") }
+                        .accessibilityLabel("中断当前轮次").disabled(sender.busy || !sender.canSubmit(.interrupt))
+                    }
                     Button { proxy.scrollTo("conversation-end", anchor: .bottom) } label: { Image(systemName: "arrow.down.to.line") }
                         .accessibilityLabel("查看最新输出")
                 }
             }
         }
-        .navigationTitle(session.snapshot?.thread.title ?? "会话")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: threadID) { await session.selectThread(threadID) }
-        .onChange(of: draft) { text in
-            guard writable else { return }
-            do { try drafts.write(text, serverID: serverID, threadID: threadID); draftMessage = nil }
-            catch { draftMessage = "草稿未能保存，请复制内容后重试。" }
-        }
+        .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
     private func title(_ item: Item) -> String {
         switch item.kind {

@@ -30,9 +30,27 @@ struct OperationJournal {
         guard Set(values.map(\.id)).count == values.count, values.allSatisfy({ UUID(uuidString: $0.id) != nil }) else { throw ConnectionError.invalidResponse }
         return values
     }
-    func save(_ records: [CommandRecord], serverID: UUID) throws {
+    @discardableResult
+    func save(_ records: [CommandRecord], serverID: UUID) throws -> [CommandRecord] {
+        // MainActor callers serialize access. A late screen's snapshot must
+        // merge with the namespace on disk rather than replace newer UUIDs.
+        var merged = try load(serverID: serverID)
+        func priority(_ state: Operation.State) -> Int {
+            switch state { case .pending: return 0; case .unknown: return 1; case .failed: return 2; case .accepted: return 3 }
+        }
+        for incoming in records {
+            if let index = merged.firstIndex(where: { $0.id == incoming.id }) {
+                let existing = merged[index]
+                guard existing.method == incoming.method, existing.context == incoming.context else { throw ConnectionError.invalidResponse }
+                let winner = priority(incoming.receipt.state) >= priority(existing.receipt.state) ? incoming.receipt : existing.receipt
+                let other = winner == incoming.receipt ? existing.receipt : incoming.receipt
+                merged[index].receipt = Operation(id: winner.id, state: winner.state, result: winner.result == .null ? other.result : winner.result, message: winner.message)
+                merged[index].reviewed = existing.reviewed || incoming.reviewed
+            } else { merged.append(incoming) }
+        }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try write(JSONEncoder().encode(records), url(serverID))
+        try write(JSONEncoder().encode(merged), url(serverID))
+        return merged
     }
 }
 
@@ -61,7 +79,7 @@ final class CommandSender: ObservableObject {
                 loaded[index].receipt = Operation(id: old.id, state: .unknown, result: old.result, message: "上次发送结果尚未确认，请核对任务。")
                 changed = true
             }
-            if changed { try journal.save(loaded, serverID: serverID) }
+            if changed { loaded = try journal.save(loaded, serverID: serverID) }
             records = loaded
         } catch { unreadable = true; message = "无法读取操作记录。为避免重复提交，暂时不能发送。" }
     }
@@ -80,7 +98,7 @@ final class CommandSender: ObservableObject {
         let entry = CommandRecord(method: method, context: Self.context(method, params), createdAt: ISO8601DateFormatter().string(from: Date()), receipt: pending, reviewed: false)
         do {
             var next = records; next.append(entry)
-            try journal.save(next, serverID: serverID); records = next
+            records = try journal.save(next, serverID: serverID)
         } catch { return failure("无法保存操作标识，本次操作尚未发送。") }
         lastOperation = pending; message = nil; inFlight += 1; busy = true
         defer { inFlight -= 1; busy = inFlight > 0 }
@@ -97,9 +115,9 @@ final class CommandSender: ObservableObject {
             receipt = Operation(id: command.id, state: state, result: .null,
                                 message: state == .unknown ? "操作可能已提交，正在核对结果，请勿重复发送。" : "服务未接受此操作，请刷新并检查输入。")
         }
-        remember(receipt)
-        if queryAfterFailure { return await reconcile(id: command.id) }
-        return receipt
+        let saved = remember(receipt)
+        if queryAfterFailure && saved.state == .unknown { return await reconcile(id: command.id) }
+        return saved
     }
 
     func reconcile(id: String) async -> Operation {
@@ -115,7 +133,7 @@ final class CommandSender: ObservableObject {
         } catch {
             receipt = Operation(id: id, state: .unknown, result: existing.receipt.result, message: "暂时无法确认结果，请查看任务后再决定，勿直接重复发送。")
         }
-        remember(receipt); return receipt
+        return remember(receipt)
     }
 
     func acknowledgeReviewed(id: String) throws {
@@ -123,17 +141,20 @@ final class CommandSender: ObservableObject {
             throw ClientCommandError(message: "此操作仍在处理中，请稍后核对。")
         }
         var next = records; next[index].reviewed = true
-        try journal.save(next, serverID: serverID); records = next
+        records = try journal.save(next, serverID: serverID)
     }
     func respond(request: Pending, snapshot: Snapshot, response: JSONValue, features: [String: Bool]) async -> Operation {
         do { return await submit(method: .respond, params: try CommandParameters.response(request: request, snapshot: snapshot, response: response, features: features)) }
         catch { return failure(error.localizedDescription) }
     }
-    private func remember(_ receipt: Operation) {
+    private func remember(_ receipt: Operation) -> Operation {
         if let index = records.firstIndex(where: { $0.id == receipt.id }) { records[index].receipt = receipt }
         lastOperation = receipt
-        do { try journal.save(records, serverID: serverID); message = receipt.message }
-        catch { message = "已取得操作回执，但本机未能保存；重开后请核对结果。" }
+        do {
+            records = try journal.save(records, serverID: serverID)
+            let saved = records.first(where: { $0.id == receipt.id })?.receipt ?? receipt
+            lastOperation = saved; message = saved.message; return saved
+        } catch { message = "已取得操作回执，但本机未能保存；重开后请核对结果。"; return receipt }
     }
     private func failure(_ message: String) -> Operation {
         let value = Operation(id: UUID().uuidString, state: .failed, result: .null, message: message)

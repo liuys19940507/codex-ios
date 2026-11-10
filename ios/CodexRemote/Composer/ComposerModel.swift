@@ -42,9 +42,14 @@ final class ComposerModel: ObservableObject {
         } catch { message = error.localizedDescription; return nil }
     }
     private func finish(_ result: Operation, sent: String) {
-        if result.state == .accepted && text == sent { text = "" }
+        if result.state == .accepted && text == sent {
+            guard (try? drafts.read(serverID: serverID, threadID: threadID)) == sent else {
+                message = "输入已确认，本地草稿未清空，请核对内容。"; return
+            }
+            text = ""
+        }
         switch result.state {
-        case .accepted: message = "输入已确认。"
+        case .accepted: message = text.isEmpty ? "输入已确认。" : "上一条输入已确认，当前编辑内容仍是草稿。"
         case .pending: message = "正在提交，请稍候。"
         case .unknown: message = "结果尚未确认，草稿已保留，请先核对任务。"
         case .failed: message = result.message ?? "本次输入未被接受，草稿已保留。"

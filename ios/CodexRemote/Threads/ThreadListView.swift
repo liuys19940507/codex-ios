@@ -16,19 +16,30 @@ private struct WorkspaceView: View {
     let transport: any BridgeTransport
     @StateObject private var session: SessionStore
     @StateObject private var threads: ThreadListModel
+    @StateObject private var sender: CommandSender
+    @State private var path: [String] = []
     init(server: ServerConfiguration, transport: any BridgeTransport) {
         self.server = server; self.transport = transport
-        _session = StateObject(wrappedValue: SessionStore())
+        let session = SessionStore()
+        _session = StateObject(wrappedValue: session)
         _threads = StateObject(wrappedValue: ThreadListModel(transport: transport))
+        _sender = StateObject(wrappedValue: CommandSender(serverID: server.id, transport: transport, canSend: { [weak session] method in
+            guard let session, session.currentServerID == server.id, session.transport != nil else { return false }
+            switch method {
+            case .create, .rename, .archive: return session.connectionState != .failed && session.connectionState != .disconnected
+            default: return session.connectionState == .connected
+            }
+        }))
     }
     var body: some View {
         TabView {
-            NavigationStack { ThreadListView(model: threads, serverID: server.id) }
+            NavigationStack(path: $path) { ThreadListView(model: threads, serverID: server.id, openThread: { path.append($0) }) }
                 .tabItem { Label("任务", systemImage: "list.bullet.rectangle") }
             NavigationStack { ConnectionView() }
                 .tabItem { Label("连接", systemImage: "network") }
         }
         .environmentObject(session)
+        .environmentObject(sender)
         .task { await session.connect(server: server, transport: transport) }
         .onDisappear { Task { await session.disconnect() } }
     }
@@ -38,10 +49,16 @@ private struct WorkspaceView: View {
 struct ThreadListView: View {
     @ObservedObject var model: ThreadListModel
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var sender: CommandSender
     @Environment(\.dynamicTypeSize) private var typeSize
     let serverID: UUID
+    let openThread: (String) -> Void
     @State private var projectID: String?
     @State private var query = ""
+    @State private var creating = false
+    @State private var renaming: ThreadSummary?
+    @State private var renameTitle = ""
+    @State private var archiving: ThreadSummary?
     private struct Search: Hashable { let project: String?; let query: String }
     var body: some View {
         List {
@@ -64,6 +81,12 @@ struct ThreadListView: View {
                     }.padding(.vertical, 4)
                 }
                 .disabled(session.currentServerID != serverID || session.transport == nil)
+                .contextMenu {
+                    Button("重命名") { renameTitle = thread.title; renaming = thread }
+                        .disabled(sender.busy || !sender.canSubmit(.rename))
+                    Button("归档", role: .destructive) { archiving = thread }
+                        .disabled(sender.busy || !sender.canSubmit(.archive) || thread.activeTurnId != nil || thread.status == "active")
+                }
             }
             if let message = model.message {
                 Section {
@@ -76,8 +99,17 @@ struct ThreadListView: View {
                     HStack { Text("加载更多"); if model.loadingMore { Spacer(); ProgressView() } }
                 }.disabled(model.loading || model.loadingMore)
             }
+            if sender.lastOperation != nil || !sender.unresolved.isEmpty || sender.message != nil {
+                Section("操作状态") { OperationStatusView(openThread: openThread) }
+            }
         }
         .navigationTitle("任务")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { creating = true } label: { Label("新任务", systemImage: "plus") }
+                    .disabled(model.projects.isEmpty || !sender.canSubmit(.create))
+            }
+        }
         .searchable(text: $query, prompt: "搜索任务")
         .navigationDestination(for: String.self) { id in ConversationView(threadID: id, serverID: serverID) }
         .task { await model.loadProjects() }
@@ -87,6 +119,36 @@ struct ThreadListView: View {
             await model.reload(projectID: projectID, query: query)
         }
         .refreshable { await model.loadProjects(); await model.reload(projectID: projectID, query: query) }
+        .sheet(isPresented: $creating) {
+            NavigationStack {
+                NewTaskView(projects: model.projects, serverID: serverID, selectedProjectID: projectID) { id in
+                    creating = false; openThread(id)
+                    Task { await model.reload(projectID: projectID, query: query) }
+                }
+            }.environmentObject(sender).environmentObject(session)
+        }
+        .alert("重命名", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("会话名称", text: $renameTitle)
+            Button("保存") {
+                guard let target = renaming else { return }
+                let title = renameTitle
+                Task {
+                    let result = await sender.submit(method: .rename, params: ["threadId": .string(target.id), "title": .string(title)])
+                    if result.state == .accepted { await model.reload(projectID: projectID, query: query) }
+                }
+            }.disabled(renameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sender.busy)
+            Button("取消", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog("归档此会话？", isPresented: Binding(get: { archiving != nil }, set: { if !$0 { archiving = nil } }), titleVisibility: .visible) {
+            Button("确认归档", role: .destructive) {
+                guard let target = archiving else { return }
+                Task {
+                    let result = await sender.submit(method: .archive, params: ["threadId": .string(target.id)])
+                    if result.state == .accepted { await model.reload(projectID: projectID, query: query) }
+                }
+            }
+            Button("取消", role: .cancel) { archiving = nil }
+        }
     }
     private func status(_ thread: ThreadSummary) -> String {
         if thread.activeTurnId != nil || thread.status == "active" { return "进行中" }
