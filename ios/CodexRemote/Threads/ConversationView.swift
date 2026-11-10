@@ -10,8 +10,7 @@ struct ConversationView: View {
     @StateObject private var composer: ComposerModel
     @State private var title = "会话"
     @State private var followingLatest = true
-    @State private var bottomPosition: CGFloat = .greatestFiniteMagnitude
-    @State private var composerPosition: CGFloat = 0
+    @State private var geometry = ConversationGeometry()
     @State private var manualScrollUntil = Date.distantPast
     @GestureState private var readingGesture = false
     init(threadID: String, serverID: UUID, drafts: DraftStore = DraftStore()) {
@@ -64,10 +63,12 @@ struct ConversationView: View {
                     .background(GeometryReader { value in Color.clear.preference(key: ConversationComposerKey.self, value: value.frame(in: .global).minY) })
             }
             .onPreferenceChange(ConversationBottomKey.self) { position in
-                bottomPosition = position
-                if readingGesture || Date() < manualScrollUntil { followingLatest = isNearBottom }
+                geometry.bottom = position
+                if readingGesture || Date() < manualScrollUntil, followingLatest != isNearBottom {
+                    followingLatest = isNearBottom
+                }
             }
-            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0 }
+            .onPreferenceChange(ConversationComposerKey.self) { geometry.composer = $0 }
             .simultaneousGesture(DragGesture()
                 .updating($readingGesture) { _, state, _ in state = true }
                 .onChanged { _ in manualScrollUntil = Date().addingTimeInterval(2) }
@@ -108,7 +109,7 @@ struct ConversationView: View {
         .task(id: threadID) { await session.openThread(threadID) }
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
-    private var isNearBottom: Bool { composerPosition > 0 && bottomPosition <= composerPosition + 80 }
+    private var isNearBottom: Bool { geometry.composer > 0 && geometry.bottom <= geometry.composer + 80 }
     private func scrollToLatestIfFollowing(_ proxy: ScrollViewProxy) {
         guard followingLatest, !readingGesture, !session.historyLoading, session.snapshot?.thread.id == threadID else { return }
         Task { @MainActor in
@@ -121,6 +122,14 @@ struct ConversationView: View {
         guard composer.writable else { return nil }
         return { text in composer.text += composer.text.isEmpty ? text : "\n\n" + text }
     }
+}
+
+// Scroll measurements are inputs to the follow decision, not rendered state.
+// Publishing every coordinate invalidates the Markdown table anchor subtree
+// during the same layout transaction that produced those coordinates.
+private final class ConversationGeometry {
+    var bottom: CGFloat = .greatestFiniteMagnitude
+    var composer: CGFloat = 0
 }
 
 private struct ConversationBottomKey: PreferenceKey {
