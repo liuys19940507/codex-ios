@@ -36,4 +36,4 @@
 
 Codemagic 应用 ID 为 `6af2b0d8392f5c83a397ccfd`，归属于个人账号。私有仓库通过 Codemagic 生成的专用 SSH 密钥连接，GitHub Deploy key 标题为 `Codemagic Codex Remote read-only`，仅允许读取 `codex-ios`。需要停用访问时，可在 GitHub 仓库 Settings → Deploy keys 中删除该条密钥。Codemagic 保存私钥，本机不转交个人 GitHub PAT。
 
-首次使用通用仓库URL的构建在拉取代码前失败，未运行测试。补齐SSH连接后，审查前 `2114d7f` 的构建通过78项并生成历史IPA，随后因审查修订停止交付该旧包。当前 `476beb8` 的[构建25](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af318e7d9c8f862da4f4c11)通过88/88项（75项单元、13项UI），完成未签名arm64真机归档，下载后提交、哈希、平台、架构、版本和依赖锁文件核验均通过。手机覆盖安装仍待实际操作。`ios-diagnose-approval` 和 `ios-diagnose-tables` 只做诊断、不打包；正常打包入口拒绝设置了测试筛选参数的运行。详细验证与手机状态见[会话验证记录](validation/conversation-experience.md)。
+首次使用通用仓库URL的构建在拉取代码前失败，未运行测试。补齐SSH连接后，审查前 `2114d7f` 的构建通过78项并生成历史IPA，随后因审查修订停止交付该旧包。当前 `476beb8` 的[构建25](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af318e7d9c8f862da4f4c11)通过88/88项（75项单元、13项UI），完成未签名arm64真机归档，下载后提交、哈希、平台、架构、版本和依赖锁文件核验均通过。本人已确认手机覆盖安装、原连接与中文草稿保留、阅读滚动和刷新通过；双端交接仍在验证。`ios-diagnose-approval` 和 `ios-diagnose-tables` 只做诊断、不打包；正常打包入口拒绝设置了测试筛选参数的运行。详细验证与手机状态见[会话验证记录](validation/conversation-experience.md)。

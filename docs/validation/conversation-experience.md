@@ -2,9 +2,9 @@
 
 本轮以 `ffadf72` 为首版检查点，Windows Codex0.167.0/Node22.22/PowerShell5.1，Swift5/iOS16目标、Codemagic个人M2/Xcode26.3云端构建。新增功能范围见[Android 参考对照](../android-reference.md)。
 
-当前可安装候选为 `476beb8394ff78ca84c26b5e75a18ad07438d052` 的 [Codemagic构建25](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af318e7d9c8f862da4f4c11)：实际88/88通过（75项单元、13项UI），Release真机归档成功。下载后独立核验对应提交、完整测试统计、SHA256、Bundle ID、0.1.0/build4、iphoneos、arm64 Mach-O及完整依赖锁文件均通过；6张实际浅色、深色、代码查看器和最大字号截图已检查。IPA为862541字节，SHA256为`078eb136298ac50a01cfc3f4bb500b4629608581e36001cd234c1ef2f6d2cc5d`。此后文档提交不改变App源码。手机覆盖安装仍待本人操作，不能将模拟器结果记为真机通过。
+当前可安装候选为 `476beb8394ff78ca84c26b5e75a18ad07438d052` 的 [Codemagic构建25](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af318e7d9c8f862da4f4c11)：实际88/88通过（75项单元、13项UI），Release真机归档成功。下载后独立核验对应提交、完整测试统计、SHA256、Bundle ID、0.1.0/build4、iphoneos、arm64 Mach-O及完整依赖锁文件均通过；6张实际浅色、深色、代码查看器和最大字号截图已检查。IPA为862541字节，SHA256为`078eb136298ac50a01cfc3f4bb500b4629608581e36001cd234c1ef2f6d2cc5d`。此后文档提交不改变App源码。本人已确认build4覆盖安装后原连接与中文emoji草稿保留，并确认实际长会话显示、滚动、过程展开和刷新正常；双端交接结果仍待反馈。
 
-已将核验后的相同IPA复制至本机 `D:/other/codex_app/.local/artifacts/CodexRemote-build4.ipa`，复制后SHA256再次一致；同目录保留校验文件、验证回执和覆盖安装说明。本人已收到安装验证请求，实际手机结果仍为NOT RUN。
+已将核验后的相同IPA复制至本机 `D:/other/codex_app/.local/artifacts/CodexRemote-build4.ipa`，复制后SHA256再次一致；同目录保留校验文件、验证回执和覆盖安装说明。本人已确认安装、数据保留及会话阅读/刷新通过；返回列表释放与电脑/手机交接验证仍待结果。
 
 审查前候选 `2114d7f9c57ea7592cb1b2184b5eebc7b5097391` 的 [Codemagic 构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2cc88ac1033465782ed43)通过78/78项测试并完成arm64归档，下载后的提交、哈希、平台、架构与依赖锁文件核验通过。该IPA仅保留为历史证据，后续审查修订尚未全部通过验证，不能作为当前版本交付。手机仍为build3。
 
@@ -42,7 +42,9 @@
 | 持续流式Markdown更新 | PASS，新增节流与取消代际2项单元在构建10、11通过，避免快速增量无限重置等待；保留原文Unicode/CRLF |
 | 阅读旧历史时接收输出 | PASS，受控事件经真实事件流与SessionStore消费，历史和输入框坐标保持，点击最新后显示新增输出 |
 | 活跃轮次审批卡片可操作 | PASS，原失败用例在构建23、24、25连续通过；最终53.405秒，保持折叠、完整可见性、真实审批点击、成功标记和移除待处理请求断言 |
-| build4覆盖安装、草稿与新刷新/释放操作 | NOT RUN，手机仍是已验证的build3；不能将模拟器结果记为手机通过 |
+| build4覆盖安装、连接与中文草稿 | PASS，本人确认已覆盖安装，原Windows连接和“升级前草稿：中文😀”均保留 |
+| build4实际会话阅读与刷新 | PASS，本人确认长回复、代码、处理过程显示与滚动正常，刷新后草稿仍保留 |
+| build4返回列表释放与电脑/手机交接 | 待本人反馈；验证问题已发出，不能由云端结果代替 |
 
 一次早期71204d4的模拟器步骤因macOS Bash3空数组展开提前终止，退出状态未充分说明没有运行测试；该次不计通过。后续修正启动参数并增加单独的xcresult统计验证，要求真实通过用例数大于0且失败数为0。
 
@@ -59,3 +61,7 @@
 普通 Apple 账号的签名有效期与实际续签状态仍沿用[签名记录](signing.md)，本轮未创建定时任务。
 
 本轮暂缓两项Minor：完整代码查看器按2048字符切块可能出现额外视觉换行（复制原文保持准确）；README的首次Codemagic状态文字尚未更新，构建状态以本记录和构建配置文档为准。手机覆盖安装与实际操作保持NOT RUN；已有个人Windows盘符项目验证不能推断尚未实测的UNC路径或上游路径别名兼容性。
+
+build4手机交接检查发现一条实际受占用会话“AI平台-agent”：输入文字后仍只读，桥接返回独立CLI占用提示。只读查询及进程检查证实电脑仍启动--no-daemon，其PowerShell父窗口创建于2026-11-09 16:21，早于共享profile的19:21修改。磁盘中的codex函数正确；实际新PowerShell加载profile后，默认入口和resume模式均为共享。已请本人正常退出旧CLI，重载PROFILE后在原项目目录恢复同一会话ID，再在手机刷新。此步骤尚待本人反馈；未终止用户CLI或原共享服务，未修改App或绕过writer锁。
+
+随后本人反馈“codex远程控制app”也只读。实际无模型指令订阅探针分别确认：AI平台-agent（01a08510-77ad-7970-886b-ceb7bb3e0aa9）已进入共享服务，thread/resume接受；本项目会话（01a1bdfe-d0a5-78e1-b96e-08561406216b）仍返回already has an active writer。探针只释放自己的订阅，没有结束用户会话。进程检查对应已有共享客户端和另一个--no-daemon独立CLI。每个旧PowerShell窗口需分别重载PROFILE；本项目须在当前回复结束后正常退出旧CLI，再在该窗口重载配置并以同一ID共享恢复。此项仍待本人实际完成和手机确认，不记交接通过。
