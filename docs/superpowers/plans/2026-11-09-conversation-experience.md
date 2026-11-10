@@ -86,8 +86,15 @@
 
 **Interfaces:** personal mac_mini_m2, Xcode26.3; one serial workflow runs existing simulator tests, requires actual passing xcresult summary, exports screenshots/results even on test failure, then builds the unsigned arm64 IPA with commit/hash. No Apple signing credentials. Retain existing private GitHub origin; GitHub iOS workflow becomes manual fallback. Manual Codemagic build initially avoids duplicate automatic runs. Installer persists XcodeGen PATH through CM_ENV or GITHUB_PATH.
 
-- [ ] RED local orchestration checks for failed/missing tests preventing packaging and retained diagnosis, then GREEN runner; validate YAML against official schema and shell syntax. Commit/push configuration.
+- [x] RED local orchestration checks for failed/missing tests preventing packaging and retained diagnosis, then GREEN runner; validate YAML against official schema and shell syntax. Commit/push configuration.
 - [ ] Connect user personal Codemagic account/private repository, run exact candidate and inspect real logs/tests/screenshots/IPA. Login/repository access requires user browser or locally supplied API credential; no paid billing changes.
+
+### T5c: Approved independent task-creation form
+
+After three failed layout fixes, the user explicitly approved an independent form. First collect the DEBUG-only button/send/receipt trace from the existing failing test. Then make the complete form own one ComposerModel and its submit action at the navigation/Form root, rather than deriving toolbar actions from a generic composer inside a Form cell. Resolve sender/model preferences synchronously at the action boundary. Keep `__new__:<projectId>` draft namespaces, accepted-only clearing, operation journal/idempotency, and the existing returned-thread navigation callback. Disable project switching/dismissal immediately during submission. ComposerView becomes conversation-only. Keep UI diagnostics until the accepted path is verified, then remove temporary instrumentation before final review.
+
+- [ ] Observe call-chain diagnosis, implement independent form and verify existing create UI test with preserved draft/receipt behavior.
+- [ ] Verify largest-text Markdown scales once and process/copy/child/parent-draft controls remain reachable; inspect actual screenshots.
 
 ### T6: Verify, review and package
 

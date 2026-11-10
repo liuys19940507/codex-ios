@@ -59,7 +59,7 @@ struct ConversationView: View {
                 }.padding()
             }.scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: lifecycle.info?.features ?? [:], compact: true)
+                ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: lifecycle.info?.features ?? [:])
                     .padding(.horizontal, 12).padding(.vertical, 8).background(.bar)
                     .background(GeometryReader { value in Color.clear.preference(key: ConversationComposerKey.self, value: value.frame(in: .global).minY) })
             }
