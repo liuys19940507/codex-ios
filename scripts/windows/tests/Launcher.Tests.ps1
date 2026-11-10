@@ -49,6 +49,22 @@ Describe 'PowerShell launcher' {
         for ($i=0; $i -lt $expected.Count; $i++) { $actual[$i] | Should -BeExactly $expected[$i] }
     }
 
+    It 'honors an explicit native directory without adding a duplicate option' {
+        foreach ($arguments in @(@('-C','D:\项目 空格','resume','thread'),@('--cd','D:\other'),@('--cd=D:\other'),@('-CD:\other'),@('resume','thread','--cd','D:\other'))) {
+            $actual = @(Get-CodexRemoteArguments -RemoteUrl 'ws://127.0.0.1:8390' -ProjectPath 'C:\default' -CliArguments $arguments)
+            $actual.Count | Should -Be (4 + $arguments.Count)
+            for ($i=0; $i -lt $arguments.Count; $i++) { $actual[4+$i] | Should -BeExactly $arguments[$i] }
+        }
+    }
+    It 'keeps default directory for configuration values and literal prompt text' {
+        foreach ($arguments in @(@('-c','name=value'),@('--config','-Cdata'),@('--model','--cd=literal'),@('--','explain','--cd','literal'))) {
+            $actual = @(Get-CodexRemoteArguments -RemoteUrl 'ws://127.0.0.1:8390' -ProjectPath 'C:\default' -CliArguments $arguments)
+            $actual.Count | Should -Be (6 + $arguments.Count)
+            $actual[4] | Should -BeExactly '-C'
+            $actual[5] | Should -BeExactly 'C:\default'
+        }
+    }
+
     It 'captures literal arguments in an actual native process and restores the environment' {
         $preferredNode = @(Get-Command node.exe -CommandType Application)[0].Source
         Mock Get-Command -ModuleName CodexRemote.Launcher -ParameterFilter { $Name -eq 'node.exe' } -MockWith {

@@ -53,7 +53,10 @@ final class MessageRenderModelTests: XCTestCase {
 private actor RenderPause {
     private var waiters: [CheckedContinuation<Void, Never>] = []
     var waitingCount: Int { waiters.count }
-    func wait() async { await withCheckedContinuation { waiters.append($0) } }
+    func wait() async {
+        guard !Task.isCancelled else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
     func tick() { if !waiters.isEmpty { waiters.removeFirst().resume() } }
     func finish() { let pending = waiters; waiters = []; pending.forEach { $0.resume() } }
 }

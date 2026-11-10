@@ -93,6 +93,13 @@ struct ConversationView: View {
                     }
                     Button { manualScrollUntil = .distantPast; followingLatest = true; proxy.scrollTo("conversation-end", anchor: .bottom) } label: { Image(systemName: "arrow.down.to.line") }
                         .accessibilityLabel("查看最新输出")
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--ui-test-events"), let fixture = session.transport as? UITestWorkspaceTransport {
+                        Button { Task { await fixture.emitNextOutput() } } label: { Image(systemName: "waveform.path.badge.plus") }
+                            .accessibilityLabel("接收测试输出")
+                            .accessibilityValue("事件 \(session.snapshot?.cursor.seq ?? -1)")
+                    }
+                    #endif
                 }
             }
         }

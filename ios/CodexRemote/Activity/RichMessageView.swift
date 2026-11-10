@@ -8,16 +8,17 @@ private struct PlaceholderInlineImageProvider: InlineImageProvider {
     func image(with url: URL, label: String) async throws -> Image { Image(systemName: "photo") }
 }
 
+@MainActor
 struct RichMessageView: View {
     let text: String
     var onRendered: (() -> Void)? = nil
-    @State private var blocks: [MessageBlock] = []
+    @StateObject private var rendering = MessageRenderModel()
     @State private var showingAll = false
     // MarkdownUI's ScaledFontSizeModifier applies Dynamic Type itself.
     private let fontSize: CGFloat = 17
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(blocks) { block in
+            ForEach(rendering.blocks) { block in
                 if block.kind == .code {
                     CodeOutputView(text: block.content, language: block.language ?? "代码", title: "代码")
                     if !block.complete { Text("代码块未闭合").font(.caption).foregroundStyle(.secondary) }
@@ -37,13 +38,11 @@ struct RichMessageView: View {
         .environment(\.openURL, OpenURLAction { url in
             ["https", "http"].contains(url.scheme?.lowercased() ?? "") ? .systemAction : .discarded
         })
-        .task(id: text) {
-            // Coalesce streaming updates; preserve the original bytes for copying.
-            if !blocks.isEmpty { try? await Task.sleep(nanoseconds: 80_000_000) }
-            guard !Task.isCancelled else { return }
-            let parsed = await Task.detached(priority: .userInitiated) { MessageDocument.parse(text) }.value
-            guard !Task.isCancelled else { return }
-            blocks = parsed
+        .onAppear { rendering.update(text) }
+        .onChange(of: text) { rendering.update($0) }
+        .onDisappear { rendering.cancel() }
+        .task(id: rendering.revision) {
+            guard rendering.revision > 0 else { return }
             try? await Task.sleep(nanoseconds: 16_000_000)
             guard !Task.isCancelled else { return }
             onRendered?()

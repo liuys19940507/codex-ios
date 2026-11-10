@@ -63,7 +63,19 @@ function Resolve-CodexRemoteProjectDirectory {
 
 function Get-CodexRemoteArguments {
     param([string]$RemoteUrl, [string]$ProjectPath, [string]$Prompt, [string[]]$CliArguments = @())
-    $result = @('--remote', $RemoteUrl, '--remote-auth-token-env', 'CODEX_REMOTE_LOCAL_TOKEN', '-C', $ProjectPath) + $CliArguments
+    $hasDirectory = $false
+    $valueFlags = @('-m','--model','-p','--profile','-c','--config','-s','--sandbox','-a','--ask-for-approval','--add-dir','-i','--image')
+    for ($index = 0; $index -lt $CliArguments.Count; $index++) {
+        $argument = $CliArguments[$index]
+        if ($argument -ceq '--') { break }
+        if ($argument -ceq '-C' -or $argument -ceq '--cd' -or $argument.StartsWith('--cd=',[StringComparison]::Ordinal) -or $argument.StartsWith('-C',[StringComparison]::Ordinal)) {
+            $hasDirectory = $true; break
+        }
+        if ($valueFlags -ccontains $argument) { $index++ }
+    }
+    $result = @('--remote', $RemoteUrl, '--remote-auth-token-env', 'CODEX_REMOTE_LOCAL_TOKEN')
+    if (!$hasDirectory) { $result += @('-C', $ProjectPath) }
+    $result += $CliArguments
     if ($Prompt) { $result += @('--', $Prompt) }
     return $result
 }
