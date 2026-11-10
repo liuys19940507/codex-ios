@@ -42,5 +42,5 @@ func reduce(snapshot: Snapshot, event: Envelope) -> Snapshot {
         default: unknown()
         }
     }
-    return Snapshot(cursor: event.cursor, thread: thread, items: items, itemsCursor: snapshot.itemsCursor, pending: pending, policy: snapshot.policy)
+    return Snapshot(cursor: event.cursor, thread: thread, items: items, itemsCursor: snapshot.itemsCursor, pending: pending, policy: snapshot.policy, readOnlyReason: snapshot.readOnlyReason)
 }

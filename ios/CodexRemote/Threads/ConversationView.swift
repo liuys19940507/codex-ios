@@ -18,6 +18,7 @@ struct ConversationView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if let snapshot = session.snapshot, snapshot.thread.id == threadID {
+                        if let reason = snapshot.readOnlyReason { Label(reason, systemImage: "desktopcomputer").font(.callout).foregroundStyle(.secondary) }
                         if snapshot.itemsCursor != nil {
                             Button {
                                 let anchor = snapshot.items.first?.id
@@ -50,6 +51,13 @@ struct ConversationView: View {
             }.scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        Task {
+                            if !lifecycle.active || !lifecycle.ready { await lifecycle.setActive(true) }
+                            else { await session.refreshThread(threadID) }
+                        }
+                    } label: { if session.refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") } }
+                    .accessibilityLabel("刷新历史并重新连接").disabled(session.refreshing || sender.busy)
                     if lifecycle.info?.features["interrupt"] == true, let current = session.snapshot, current.thread.id == threadID, let turn = current.thread.activeTurnId {
                         Button(role: .destructive) {
                             Task { _ = await sender.submit(method: .interrupt, params: ["threadId": .string(threadID), "turnId": .string(turn)]) }
@@ -63,7 +71,7 @@ struct ConversationView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: threadID) { await session.selectThread(threadID) }
+        .task(id: threadID) { await session.openThread(threadID) }
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
 }

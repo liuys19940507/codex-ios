@@ -90,6 +90,7 @@ struct Snapshot: Codable, Equatable, Sendable {
     let itemsCursor: String?
     let pending: [Pending]
     let policy: Policy
+    var readOnlyReason: String? = nil
 }
 
 struct Envelope: Codable, Equatable, Sendable {
@@ -111,6 +112,7 @@ struct Command: Codable, Equatable, Identifiable, Sendable {
     enum Method: String, Codable, Sendable {
         case create = "task/create", input = "task/input", interrupt = "task/interrupt"
         case respond = "request/respond", rename = "thread/rename", archive = "thread/archive"
+        case attach = "thread/attach", release = "thread/release"
     }
     let id: String
     let method: Method

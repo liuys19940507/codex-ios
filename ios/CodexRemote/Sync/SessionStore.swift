@@ -10,6 +10,13 @@ final class SessionStore: ObservableObject {
     @Published private(set) var message: String?
     @Published private(set) var historyLoading = false
     @Published private(set) var historyMessage: String?
+    @Published private(set) var refreshing = false
+    @Published private(set) var releaseMessage: String?
+    private struct Attachment { let threadID: String; let id: UUID }
+    private var attachment: Attachment?
+    var attachmentID: UUID? { attachment?.id }
+    var selectedThreadID: String? { selectedThread }
+    var canControl: Bool { snapshot != nil && snapshot?.readOnlyReason == nil && connectionState == .connected }
     private(set) var transport: (any BridgeTransport)?
     private let makeTransport: @MainActor (ServerConfiguration) async throws -> any BridgeTransport
     private let cursors: CursorStore
@@ -32,9 +39,12 @@ final class SessionStore: ObservableObject {
         generation = connection; selection = UUID(); streamID = UUID()
         stream?.cancel(); stream = nil
         let previous = transport
+        let previousAttachment = attachment
+        attachment = nil; refreshing = false
         transport = nil; snapshot = nil; selectedThread = nil; loading = false; buffered = []; overflow = false
         currentServerID = server.id; cursor = nil; message = nil; connectionState = .connecting
         historyLoading = false; historyMessage = nil
+        if let previous, let previousAttachment { await release(previousAttachment, using: previous) }
         await previous?.close()
         guard generation == connection else { return }
         do {
@@ -94,6 +104,53 @@ final class SessionStore: ObservableObject {
         }
     }
 
+    func openThread(_ id: String) async {
+        guard let transport else { return }
+        if attachment?.threadID == id { await refreshThread(id); return }
+        let previous = attachment, next = Attachment(threadID: id, id: UUID()), connection = generation
+        attachment = next; selectedThread = id; selection = UUID()
+        stream?.cancel(); stream = nil; streamID = UUID()
+        snapshot = nil; message = nil; connectionState = .syncing
+        if let previous { await release(previous, using: transport) }
+        guard generation == connection, attachment?.id == next.id else { return }
+        await refreshThread(id)
+    }
+
+    func refreshThread(_ id: String) async {
+        guard let transport, let current = attachment, current.threadID == id else { await selectThread(id); return }
+        let connection = generation
+        refreshing = true; message = nil; connectionState = .syncing
+        defer { if generation == connection, attachment?.id == current.id { refreshing = false } }
+        do {
+            let command = Command(id: UUID().uuidString, method: .attach, params: ["threadId": .string(id), "attachmentId": .string(current.id.uuidString)])
+            let receipt = try await transport.command(command)
+            guard generation == connection, attachment?.id == current.id else { return }
+            guard receipt.id == command.id, receipt.state == .accepted else { throw ClientCommandError(message: receipt.message ?? "会话连接未确认，请刷新重试。") }
+            await selectThread(id)
+        } catch {
+            guard generation == connection, attachment?.id == current.id else { return }
+            connectionState = .failed; message = "无法重新连接会话，请检查 EasyTier 后刷新重试。"
+        }
+    }
+
+    func leaveThread(_ id: String, attachmentID expected: UUID?) async {
+        guard let current = attachment, current.threadID == id, current.id == expected else { return }
+        attachment = nil; selectedThread = nil; selection = UUID(); streamID = UUID()
+        stream?.cancel(); stream = nil
+        snapshot = nil; loading = false; buffered = []; overflow = false; refreshing = false
+        historyLoading = false; historyMessage = nil; message = nil; connectionState = .syncing
+        if let transport { await transport.cancelEvents(); await release(current, using: transport) }
+    }
+
+    private func release(_ current: Attachment, using transport: any BridgeTransport) async {
+        do {
+            let command = Command(id: UUID().uuidString, method: .release, params: ["threadId": .string(current.threadID), "attachmentId": .string(current.id.uuidString)])
+            let receipt = try await transport.command(command)
+            guard receipt.id == command.id, receipt.state == .accepted else { throw ConnectionError.invalidResponse }
+            releaseMessage = nil
+        } catch { releaseMessage = "尚未确认释放上一会话的连接，请保持 EasyTier 在线后重新进入并返回列表。" }
+    }
+
     private func startStream(_ transport: any BridgeTransport, after: Cursor, connection: UUID) {
         stream?.cancel()
         let identifier = UUID(); streamID = identifier
@@ -131,7 +188,7 @@ final class SessionStore: ObservableObject {
             guard generation == connection, selection == chosen, let current = snapshot, current.thread.id == id else { return }
             guard page.nextCursor != anchor else { throw ConnectionError.invalidResponse }
             snapshot = Snapshot(cursor: current.cursor, thread: current.thread, items: mergeHistory(older: page.data, current: current.items),
-                                itemsCursor: page.nextCursor, pending: current.pending, policy: current.policy)
+                                itemsCursor: page.nextCursor, pending: current.pending, policy: current.policy, readOnlyReason: current.readOnlyReason)
         } catch {
             guard generation == connection, selection == chosen else { return }
             if let failure = error as? ConnectionError, case .server(409, _) = failure { await selectThread(id) }
@@ -161,9 +218,9 @@ final class SessionStore: ObservableObject {
         if loading { overflow = true; return }
         stream?.cancel(); stream = nil; streamID = UUID()
         connectionState = .syncing
-        let connection = generation
+        let connection = generation, chosen = selection
         Task { [weak self] in
-            guard let self, self.generation == connection else { return }
+            guard let self, self.generation == connection, self.selection == chosen, self.selectedThread == id else { return }
             await self.selectThread(id)
         }
     }
@@ -180,7 +237,10 @@ final class SessionStore: ObservableObject {
 
     func resumeForeground() async -> Bool {
         guard transport != nil, currentServerID != nil else { return false }
-        if let id = selectedThread { await selectThread(id); return connectionState == .connected }
+        if let id = selectedThread {
+            if attachment != nil { await refreshThread(id) } else { await selectThread(id) }
+            return connectionState == .connected
+        }
         connectionState = .syncing; message = nil
         return true
     }
@@ -189,9 +249,12 @@ final class SessionStore: ObservableObject {
         generation = UUID(); selection = UUID(); streamID = UUID()
         stream?.cancel(); stream = nil
         let previous = transport
+        let previousAttachment = attachment
+        attachment = nil; refreshing = false
         transport = nil; snapshot = nil; cursor = nil; currentServerID = nil; selectedThread = nil
         loading = false; buffered = []; message = nil; connectionState = .disconnected
         historyLoading = false; historyMessage = nil
+        if let previous, let previousAttachment { await release(previousAttachment, using: previous) }
         await previous?.close()
     }
 }

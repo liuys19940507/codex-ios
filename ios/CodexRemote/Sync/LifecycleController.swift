@@ -38,7 +38,7 @@ final class LifecycleController: ObservableObject {
         guard active, ready, info?.apiVersion == 1, session.currentServerID == server.id, session.transport != nil else { return false }
         switch method {
         case .create, .rename, .archive: return session.connectionState != .failed && session.connectionState != .disconnected
-        default: return session.connectionState == .connected
+        default: return session.canControl
         }
     }
 }

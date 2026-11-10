@@ -60,6 +60,8 @@ struct OperationStatusView: View {
         case .respond: return "处理请求"
         case .rename: return "重命名"
         case .archive: return "归档"
+        case .attach: return "连接会话"
+        case .release: return "释放会话"
         }
     }
 }

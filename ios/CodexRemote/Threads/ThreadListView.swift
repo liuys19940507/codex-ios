@@ -49,6 +49,12 @@ private struct WorkspaceView: View {
             await settings.load()
         }
         .onChange(of: phase) { value in Task { await lifecycle.setActive(value == .active) } }
+        .onChange(of: path) { value in
+            if value.isEmpty, let id = session.selectedThreadID {
+                let attachment = session.attachmentID
+                Task { await session.leaveThread(id, attachmentID: attachment) }
+            }
+        }
         .onDisappear { Task { await lifecycle.setActive(false); await session.disconnect() } }
     }
 }
@@ -72,6 +78,7 @@ struct ThreadListView: View {
     private struct Search: Hashable { let project: String?; let query: String }
     var body: some View {
         List {
+            if let warning = session.releaseMessage { Text(warning).font(.footnote).foregroundStyle(.secondary) }
             if !lifecycle.ready {
                 Section {
                     Text(lifecycle.message ?? "正在校验服务并同步状态…").font(.footnote)
@@ -94,6 +101,9 @@ struct ThreadListView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(thread.title).font(.headline).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                         Text(status(thread)).font(.caption).foregroundStyle(.secondary)
+                        if let project = model.projects.first(where: { $0.id == thread.projectId }) {
+                            Text(project.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        }
                     }.padding(.vertical, 4)
                 }
                 .disabled(session.currentServerID != serverID || session.transport == nil)
