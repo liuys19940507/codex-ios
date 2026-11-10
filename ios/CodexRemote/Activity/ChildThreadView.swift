@@ -9,5 +9,8 @@ struct ChildThreadView: View {
                 Text(threadID).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
         }
+        .accessibilityLabel("打开子任务")
+        .accessibilityHint(threadID)
+        .accessibilityIdentifier("打开子任务")
     }
 }

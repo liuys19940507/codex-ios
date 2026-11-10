@@ -11,9 +11,8 @@ enum DiffPresentation {
         var start = text.startIndex, lines: [DiffLine] = []
         // Keep original terminators and the missing final newline, including CRLF.
         while start < text.endIndex {
-            let remaining = text[start...]
             let end: String.Index
-            if let newline = remaining.range(of: "\n") { end = newline.upperBound }
+            if let newline = text.unicodeScalars[start...].firstIndex(where: { $0.value == 10 }) { end = text.unicodeScalars.index(after: newline) }
             else { end = text.endIndex }
             let line = String(text[start..<end])
             let kind: DiffLine.Kind
