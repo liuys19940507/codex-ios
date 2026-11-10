@@ -5,7 +5,8 @@ import MarkdownUI
 final class MarkdownTableTests: XCTestCase {
     func testLibraryGeneratedTablePreservesCellsAndAlignments() throws {
         let markdown = "| 左 | 中 | 右 |\r\n| :--- | :---: | ---: |\r\n| 中文😀 | 竖\\|线 | e\u{301} |"
-        let table = try XCTUnwrap(MarkdownTableDocument.parse(html: MarkdownContent(markdown).renderHTML()))
+        let html = MarkdownContent(markdown).renderHTML()
+        let table = try XCTUnwrap(MarkdownTableDocument.parse(html: html), html)
         XCTAssertEqual(table.columnCount, 3)
         XCTAssertEqual(table.rows.count, 2)
         XCTAssertTrue(table.rows[0].isHeader)
@@ -35,7 +36,8 @@ final class MarkdownTableTests: XCTestCase {
 
     func testImageIsAPlaceholderWithoutDiscardingSurroundingText() throws {
         let markdown = "| 图像 |\n| --- |\n| before ![图😀](https://example.com/image.png) after |"
-        let table = try XCTUnwrap(MarkdownTableDocument.parse(html: MarkdownContent(markdown).renderHTML()))
+        let html = MarkdownContent(markdown).renderHTML()
+        let table = try XCTUnwrap(MarkdownTableDocument.parse(html: html), html)
         XCTAssertEqual(table.rows[1].cells[0].text, "before [图片：图😀] after")
         XCTAssertTrue(table.rows[1].cells[0].runs.allSatisfy { $0.link == nil })
     }
