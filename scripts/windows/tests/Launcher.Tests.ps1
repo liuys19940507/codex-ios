@@ -3,6 +3,26 @@
 }
 
 Describe 'PowerShell launcher' {
+    It 'routes interactive work to shared transport and keeps native utilities and explicit transports' {
+        Get-CodexRemoteLaunchMode -CliArguments @() | Should -BeExactly 'shared'
+        Get-CodexRemoteLaunchMode -CliArguments @('resume','a-thread') | Should -BeExactly 'shared'
+        Get-CodexRemoteLaunchMode -CliArguments @('-m','model','resume','a-thread') | Should -BeExactly 'shared'
+        foreach($arguments in @(@('--version'),@('login'),@('-m','model','exec','literal prompt'),@('--remote','ws://other.example'),@('literal prompt','--remote=ws://other.example'),@('--no-daemon'))) {
+            Get-CodexRemoteLaunchMode -CliArguments $arguments | Should -BeExactly 'native'
+        }
+        Get-CodexRemoteLaunchMode -CliArguments @('--','login') | Should -BeExactly 'shared'
+    }
+    It 'replaces only the codex function and quotes paths without changing another account entry' {
+        $source = "# preserve 中文`r`nfunction codex2 { `$env:CODEX_HOME='C:\alternate'; codex }`r`nfunction codex { codex.cmd --no-daemon @args }`r`n"
+        $updated = Get-CodexRemoteProfileContent -Source $source -LauncherPath "D:\O'Brien\Start-CodexDefault.ps1" -ConfigPath 'C:\private\runtime.json'
+        $updated | Should -Match "O''Brien"
+        $updated | Should -Match 'function codex2'
+        $updated | Should -Match ([regex]::Escape("`$env:CODEX_HOME='C:\alternate'"))
+        $updated | Should -Not -Match 'codex.cmd --no-daemon'
+        $tokens = $null; $parseErrors = $null
+        [System.Management.Automation.Language.Parser]::ParseInput($updated,[ref]$tokens,[ref]$parseErrors)|Out-Null
+        @($parseErrors).Count | Should -Be 0
+    }
     It 'uses the actual current directory when history project discovery is enabled' {
         $directory = Join-Path $TestDrive 'another project'
         New-Item -ItemType Directory -Path $directory | Out-Null
