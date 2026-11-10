@@ -1,6 +1,30 @@
 import XCTest
 
 final class ThreadUITests: XCTestCase {
+    func testLongActivityCanCopyAndChildNavigationPreservesParentDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-workspace", "--ui-test-activity", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
+        app.staticTexts["Fixture task"].tap()
+        let copy = app.buttons["复制全部输出"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 5))
+        for _ in 0..<5 where !copy.isHittable { app.swipeUp() }
+        copy.tap()
+        XCTAssertTrue(app.staticTexts["已复制"].waitForExistence(timeout: 5))
+        let draft = app.textViews["任务草稿"]
+        for _ in 0..<8 where !draft.isHittable { app.swipeUp() }
+        draft.tap(); draft.typeText("parent draft stays")
+        app.tap() // Keep the navigation test independent of keyboard focus.
+        let child = app.buttons["打开子任务"]
+        for _ in 0..<8 where !child.isHittable { app.swipeDown() }
+        child.tap()
+        XCTAssertTrue(app.navigationBars["Child fixture task"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Fixture task"].waitForExistence(timeout: 10))
+        for _ in 0..<8 where !draft.isHittable { app.swipeUp() }
+        XCTAssertEqual(draft.value as? String, "parent draft stays")
+    }
     func testCreateTaskFromConfiguredProjectOpensTheReturnedThread() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-workspace"]
