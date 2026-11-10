@@ -14,6 +14,9 @@ struct ConversationView: View {
     @State private var composerPosition: CGFloat = 0
     @State private var manualScrollUntil = Date.distantPast
     @GestureState private var readingGesture = false
+    #if DEBUG
+    @State private var scrollTrace = ConversationScrollTrace()
+    #endif
     init(threadID: String, serverID: UUID, drafts: DraftStore = DraftStore()) {
         self.threadID = threadID; self.serverID = serverID
         _composer = StateObject(wrappedValue: ComposerModel(serverID: serverID, threadID: threadID, drafts: drafts))
@@ -64,14 +67,20 @@ struct ConversationView: View {
                     .background(GeometryReader { value in Color.clear.preference(key: ConversationComposerKey.self, value: value.frame(in: .global).minY) })
             }
             .onPreferenceChange(ConversationBottomKey.self) { position in
+                traceScroll("bottom.before", incoming: position)
                 bottomPosition = position
                 if readingGesture || Date() < manualScrollUntil { followingLatest = isNearBottom }
+                traceScroll("bottom.after", incoming: position)
             }
-            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0 }
+            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0; traceScroll("composer", incoming: $0) }
             .simultaneousGesture(DragGesture()
                 .updating($readingGesture) { _, state, _ in state = true }
-                .onChanged { _ in manualScrollUntil = Date().addingTimeInterval(2) }
-                .onEnded { _ in followingLatest = isNearBottom; manualScrollUntil = Date().addingTimeInterval(2) })
+                .onChanged { value in manualScrollUntil = Date().addingTimeInterval(2); traceScroll("drag.changed", incoming: value.translation.height) }
+                .onEnded { value in
+                    traceScroll("drag.end.before", incoming: value.translation.height)
+                    followingLatest = isNearBottom; manualScrollUntil = Date().addingTimeInterval(2)
+                    traceScroll("drag.end.after", incoming: value.translation.height)
+                })
             .onChange(of: session.snapshot?.cursor) { _ in
                 scrollToLatestIfFollowing(proxy)
             }
@@ -109,11 +118,20 @@ struct ConversationView: View {
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
     private var isNearBottom: Bool { composerPosition > 0 && bottomPosition <= composerPosition + 80 }
+    private func traceScroll(_ event: String, incoming: CGFloat = 0) {
+        #if DEBUG
+        scrollTrace.record(event, incoming: incoming, bottom: bottomPosition, composer: composerPosition,
+                           following: followingLatest, reading: readingGesture, manual: manualScrollUntil.timeIntervalSinceNow)
+        #endif
+    }
     private func scrollToLatestIfFollowing(_ proxy: ScrollViewProxy) {
+        traceScroll("follow.request")
         guard followingLatest, !readingGesture, !session.historyLoading, session.snapshot?.thread.id == threadID else { return }
+        traceScroll("follow.schedule")
         Task { @MainActor in
             await Task.yield()
             guard followingLatest, !readingGesture, session.selectedThreadID == threadID else { return }
+            traceScroll("follow.execute")
             proxy.scrollTo("conversation-end", anchor: .bottom)
         }
     }
@@ -122,6 +140,27 @@ struct ConversationView: View {
         return { text in composer.text += composer.text.isEmpty ? text : "\n\n" + text }
     }
 }
+
+#if DEBUG
+@MainActor
+private final class ConversationScrollTrace {
+    private let enabled = ProcessInfo.processInfo.arguments.contains("--ui-test-pending")
+    private var seen: [String: Int] = [:]
+    private var emitted = 0
+    private var lastFollowing: Bool?
+    func record(_ event: String, incoming: CGFloat, bottom: CGFloat, composer: CGFloat,
+                following: Bool, reading: Bool, manual: TimeInterval) {
+        guard enabled, emitted < 200 else { return }
+        seen[event, default: 0] += 1
+        let count = seen[event, default: 0]
+        let changed = lastFollowing != following
+        lastFollowing = following
+        guard count <= 20 || count.isMultiple(of: 50) || changed || event.hasPrefix("drag.end") else { return }
+        emitted += 1
+        NSLog("%@", "CODEX_SCROLL_TRACE event=\(event) count=\(count) incoming=\(incoming) bottom=\(bottom) composer=\(composer) following=\(following) reading=\(reading) manual=\(manual)")
+    }
+}
+#endif
 
 private struct ConversationBottomKey: PreferenceKey {
     static var defaultValue: CGFloat = .greatestFiniteMagnitude

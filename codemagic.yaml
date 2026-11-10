@@ -32,12 +32,13 @@ workflows:
       - name: Install pinned XcodeGen
         script: bash scripts/ci/install-xcodegen.sh
       - name: Reproduce approval and sample simulator process
-        script: bash scripts/ci/diagnose-ios.sh
+        script: CODEX_CAPTURE_SCROLL_TRACE=1 bash scripts/ci/diagnose-ios.sh
     artifacts:
       - build/commit.txt
       - build/ios-test.log
       - build/ios-test-summary.json
       - build/approval-diagnostics.zip
+      - build/scroll-trace.log
       - build/ios-screenshots.zip
   ios-verify-package:
     name: Codex Remote - test and unsigned IPA

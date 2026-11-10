@@ -7,6 +7,10 @@ source scripts/ci/prepare-swift-packages.sh
 simulator_id=''
 cleanup() {
   if [[ -n "$simulator_id" ]]; then
+    if [[ ${CODEX_CAPTURE_SCROLL_TRACE:-0} == 1 ]]; then
+      xcrun simctl spawn "$simulator_id" log show --style compact --last 10m \
+        --predicate 'eventMessage BEGINSWITH "CODEX_SCROLL_TRACE"' > build/scroll-trace.log 2>&1 || true
+    fi
     xcrun simctl shutdown "$simulator_id" >/dev/null 2>&1 || true
     xcrun simctl delete "$simulator_id"
   fi
