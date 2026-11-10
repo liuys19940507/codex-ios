@@ -106,3 +106,12 @@ Diagnosis checkpoint: three repair hypotheses (indicator, page coordinate state,
 - [x] Safely restart only the verified own bridge; preserve native service and verify real36-project queries/handoff. Download and independently verify the exact build4 artifact.
 - [x] Publish verified build4 locally with checksum, provenance and cover-install instructions at D:/other/codex_app/.local/artifacts/CodexRemote-build4.ipa.
 - [ ] Complete physical cover-install checks for retained connection/draft, refresh and return-to-list release. Phone currently build3; no physical success inferred from simulator.
+
+### T7: Multiple local task pins and fixed conversation editor (user follow-up)
+
+Build on verified build4/source476beb8; the installed build4 already retains the connection and Chinese draft and passes actual rendering/scroll/refresh checks. The older independent CLI handoff remains a separate configuration gate.
+
+- [ ] Add eight persistence/ordering/filter/pagination/race/failure tests for per-connection pins, one UI test for two simultaneous pins/relaunch/unpin, and two UI tests reproducing text-driven editor growth at ordinary and largest text sizes. Observe RED before the corresponding implementation.
+- [ ] Store latest-first pin summaries in a separate atomic local preferences file, preserve pinned entries beyond the first server page, refresh missing metadata with existing read-only snapshot GETs, and retain local records on temporary network errors. Keep project/search filters, avoid duplicates, and remove a local pin after accepted archive. No Windows bridge or control API changes.
+- [ ] Add leading swipe and context-menu pin/unpin actions, a pinned section and accessible pin status. Make editor height independent of its text, with internal scrolling and room for a complete line at larger system text sizes.
+- [ ] Increment the iOS build to5, run all83 unit+16 UI=99 tests and the existing device archive gate, independently verify/download the exact IPA and inspect final screenshots. Publish build5 without overwriting build4, then obtain actual phone confirmation of multiple pins/restart and fixed-height typing.

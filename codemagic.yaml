@@ -1,5 +1,43 @@
 # yaml-language-server: $schema=https://codemagic.io/codemagic-schema.json
 workflows:
+  ios-diagnose-composer:
+    name: Codex Remote - composer height tests only
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    environment:
+      xcode: "26.3"
+    cache:
+      cache_paths:
+        - build/SourcePackages
+    scripts:
+      - name: Install pinned XcodeGen
+        script: bash scripts/ci/install-xcodegen.sh
+      - name: Verify fixed editor height at normal and largest text sizes
+        script: bash scripts/ci/diagnose-ios.sh CodexRemoteUITests/ComposerUITests
+    artifacts:
+      - build/commit.txt
+      - build/ios-test.log
+      - build/ios-test-summary.json
+      - build/ios-screenshots.zip
+  ios-diagnose-pins:
+    name: Codex Remote - pinned task tests only
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    environment:
+      xcode: "26.3"
+    cache:
+      cache_paths:
+        - build/SourcePackages
+    scripts:
+      - name: Install pinned XcodeGen
+        script: bash scripts/ci/install-xcodegen.sh
+      - name: Verify task pin persistence and ordering
+        script: bash scripts/ci/diagnose-ios.sh CodexRemoteTests/PinnedThreadTests
+    artifacts:
+      - build/commit.txt
+      - build/ios-test.log
+      - build/ios-test-summary.json
+      - build/ios-screenshots.zip
   ios-diagnose-tables:
     name: Codex Remote - table conversion tests only
     instance_type: mac_mini_m2
