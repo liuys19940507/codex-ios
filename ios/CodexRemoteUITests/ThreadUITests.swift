@@ -1,6 +1,20 @@
 import XCTest
 
 final class ThreadUITests: XCTestCase {
+    func testConversationHasRefreshAndRetainsDraftAfterRefresh() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-workspace"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
+        app.staticTexts["Fixture task"].tap()
+        let refresh = app.buttons["刷新历史并重新连接"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+        let draft = app.textViews["任务草稿"]
+        for _ in 0..<6 where !draft.isHittable { app.swipeUp() }
+        draft.tap(); draft.typeText("refresh preserves draft")
+        refresh.tap()
+        XCTAssertEqual(draft.value as? String, "refresh preserves draft")
+    }
     func testLongActivityCanCopyAndChildNavigationPreservesParentDraft() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-workspace", "--ui-test-activity", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
