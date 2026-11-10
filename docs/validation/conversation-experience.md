@@ -4,6 +4,8 @@
 
 当前可安装候选为 `476beb8394ff78ca84c26b5e75a18ad07438d052` 的 [Codemagic构建25](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af318e7d9c8f862da4f4c11)：实际88/88通过（75项单元、13项UI），Release真机归档成功。下载后独立核验对应提交、完整测试统计、SHA256、Bundle ID、0.1.0/build4、iphoneos、arm64 Mach-O及完整依赖锁文件均通过；6张实际浅色、深色、代码查看器和最大字号截图已检查。IPA为862541字节，SHA256为`078eb136298ac50a01cfc3f4bb500b4629608581e36001cd234c1ef2f6d2cc5d`。此后文档提交不改变App源码。手机覆盖安装仍待本人操作，不能将模拟器结果记为真机通过。
 
+已将核验后的相同IPA复制至本机 `D:/other/codex_app/.local/artifacts/CodexRemote-build4.ipa`，复制后SHA256再次一致；同目录保留校验文件、验证回执和覆盖安装说明。本人已收到安装验证请求，实际手机结果仍为NOT RUN。
+
 审查前候选 `2114d7f9c57ea7592cb1b2184b5eebc7b5097391` 的 [Codemagic 构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2cc88ac1033465782ed43)通过78/78项测试并完成arm64归档，下载后的提交、哈希、平台、架构与依赖锁文件核验通过。该IPA仅保留为历史证据，后续审查修订尚未全部通过验证，不能作为当前版本交付。手机仍为build3。
 
 审查后的 `12b8399` [构建11](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2e0f226d9203515d20cdd)实际通过81/82项，69项单元及12项UI通过，唯一失败是新增的活跃轮次审批UI用例：滚动长历史时主线程忙，尚未点击审批按钮。替换活动图标未解决，已撤销这一假设性改动。`75457ee` 的[独立诊断构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2e67c1448ac82ff53728c)只运行失败用例并采集模拟器调用栈，不生成IPA；修复后仍须全部82项及真机归档通过。

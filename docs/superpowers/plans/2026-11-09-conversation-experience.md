@@ -104,4 +104,5 @@ Diagnosis checkpoint: three repair hypotheses (indicator, page coordinate state,
 
 - [x] Run Windows tests/typecheck/Pester and fresh macOS iOS unit/UI/device checks. One final review completed; accepted fixes verified by tests. Final source476beb8 passed88/88 and arm64 archive, with exact artifact/hash/lock verification and six actual screenshots inspected. No repeated review.
 - [x] Safely restart only the verified own bridge; preserve native service and verify real36-project queries/handoff. Download and independently verify the exact build4 artifact.
-- [ ] Publish the verified build4 locally and complete physical cover-install checks for retained connection/draft, refresh and return-to-list release. Phone currently build3; no physical success inferred from simulator.
+- [x] Publish verified build4 locally with checksum, provenance and cover-install instructions at D:/other/codex_app/.local/artifacts/CodexRemote-build4.ipa.
+- [ ] Complete physical cover-install checks for retained connection/draft, refresh and return-to-list release. Phone currently build3; no physical success inferred from simulator.
