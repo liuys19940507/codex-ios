@@ -95,24 +95,37 @@ final class ThreadUITests: XCTestCase {
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, up: Bool) {
-        for _ in 0..<14 {
+        var observations: [String] = []
+        for attempt in 0...32 {
             let top = app.navigationBars.firstMatch.frame.maxY + 8
             let bottom = app.textViews["任务草稿"].frame.minY - 8
+            let middle = (top + bottom) / 2
+            var direction = up
+            var distance: CGFloat?
             if element.exists {
                 let frame = element.frame
+                observations.append("band=\(top)...\(bottom) frame=\(frame) hittable=\(element.isHittable)")
                 if frame.minY >= top, frame.maxY <= bottom, element.isHittable { return }
-                swipeConversation(app, up: frame.minY > top)
-            } else { swipeConversation(app, up: up) }
+                direction = frame.midY > middle
+                distance = max(40, min(150, abs(frame.midY - middle)))
+            } else { observations.append("band=\(top)...\(bottom) target not mounted") }
+            guard attempt < 32 else { break }
+            swipeConversation(app, up: direction, maximumDistance: distance)
         }
+        let trace = XCTAttachment(string: observations.joined(separator: "\n"))
+        trace.name = "conversation-scroll-coordinates"; trace.lifetime = .keepAlways; add(trace)
         XCTFail("Control did not become visible above the fixed composer")
     }
-    private func swipeConversation(_ app: XCUIApplication, up: Bool) {
+    private func swipeConversation(_ app: XCUIApplication, up: Bool, maximumDistance: CGFloat? = nil) {
         let top = app.navigationBars.firstMatch.frame.maxY + 20
         let bottom = max(top + 80, app.textViews["任务草稿"].frame.minY - 20)
+        let middle = (top + bottom) / 2
+        let halfDistance = min(maximumDistance ?? (bottom - top) * 0.8, (bottom - top) * 0.8) / 2
         let origin = app.coordinate(withNormalizedOffset: .zero)
-        let upper = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: top))
-        let lower = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: bottom))
-        (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower)
+        let upper = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: middle - halfDistance))
+        let lower = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: middle + halfDistance))
+        (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower,
+                                  withVelocity: .slow, thenHoldForDuration: 0.2)
     }
 
     func testRenameAndArchiveFromThreadMenu() {
