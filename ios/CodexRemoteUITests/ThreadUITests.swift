@@ -10,6 +10,10 @@ final class ThreadUITests: XCTestCase {
         XCTAssertTrue(app.textViews["任务草稿"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["任务已完成"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["历史同步"].waitForExistence(timeout: 5), "Keep table content when replacing its layout")
+        guard app.scrollViews["markdown-native-table"].waitForExistence(timeout: 5) else {
+            XCTFail("The native table style must be installed into the active Markdown theme")
+            return
+        }
         let process = app.buttons["查看处理过程"]
         reveal(process, in: app, up: false)
         XCTAssertFalse(app.staticTexts["controlled fixture command"].exists, "Tool details should remain collapsed")

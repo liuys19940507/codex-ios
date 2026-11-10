@@ -16,6 +16,7 @@ struct NativeMarkdownTableView: View {
                     }
                 }.fixedSize(horizontal: true, vertical: true)
             }
+            .accessibilityIdentifier("markdown-native-table")
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Text("表格文本").font(.caption).foregroundStyle(.secondary)
