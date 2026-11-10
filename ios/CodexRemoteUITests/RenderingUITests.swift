@@ -29,24 +29,31 @@ final class RenderingUITests: XCTestCase {
         XCTAssertTrue(app.textViews["任务草稿"].exists)
     }
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, up: Bool) {
+        var observations: [String] = []
         for _ in 0..<14 {
             let top = app.navigationBars.firstMatch.frame.maxY + 8
             let bottom = app.textViews["任务草稿"].frame.minY - 8
             if element.exists {
                 let frame = element.frame
+                observations.append("band=\(top)...\(bottom) frame=\(frame) hittable=\(element.isHittable)")
                 if frame.minY >= top, frame.maxY <= bottom, element.isHittable { return }
                 swipeConversation(app, up: frame.minY > top)
             } else { swipeConversation(app, up: up) }
         }
+        let trace = XCTAttachment(string: observations.joined(separator: "\n"))
+        trace.name = "rendering-scroll-coordinates"; trace.lifetime = .keepAlways; add(trace)
         XCTFail("Control did not become visible above the fixed composer")
     }
     private func swipeConversation(_ app: XCUIApplication, up: Bool) {
         let top = app.navigationBars.firstMatch.frame.maxY + 20
         let bottom = max(top + 80, app.textViews["任务草稿"].frame.minY - 20)
+        let middle = (top + bottom) / 2
+        let halfDistance = min(75, (bottom - top) / 4)
         let origin = app.coordinate(withNormalizedOffset: .zero)
-        let upper = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: top))
-        let lower = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: bottom))
-        (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower)
+        let upper = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: middle - halfDistance))
+        let lower = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: middle + halfDistance))
+        (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower,
+                                  withVelocity: .slow, thenHoldForDuration: 0.2)
     }
     private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
