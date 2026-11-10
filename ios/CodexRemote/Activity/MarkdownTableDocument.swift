@@ -3,6 +3,7 @@ import cmark_gfm
 import cmark_gfm_extensions
 
 struct MarkdownTableDocument: Equatable {
+    private typealias Node = UnsafeMutablePointer<cmark_node>
     enum Alignment: Equatable { case leading, center, trailing }
     struct Styles: OptionSet {
         let rawValue: Int
@@ -67,7 +68,7 @@ struct MarkdownTableDocument: Equatable {
         return rows.isEmpty ? nil : Self(rows: rows)
     }
 
-    private static func readChildren(_ parent: OpaquePointer, styles: Styles, link: URL?, depth: Int, runs: inout [Run]) -> Bool {
+    private static func readChildren(_ parent: Node, styles: Styles, link: URL?, depth: Int, runs: inout [Run]) -> Bool {
         guard depth < 64 else { return false }
         var node = cmark_node_first_child(parent)
         while let current = node {
@@ -96,7 +97,7 @@ struct MarkdownTableDocument: Equatable {
         }
         return true
     }
-    private static func imageLabel(_ parent: OpaquePointer, depth: Int) -> String? {
+    private static func imageLabel(_ parent: Node, depth: Int) -> String? {
         guard depth < 64 else { return nil }
         var value = "", node = cmark_node_first_child(parent)
         while let current = node {
@@ -112,8 +113,8 @@ struct MarkdownTableDocument: Equatable {
         }
         return value
     }
-    private static func type(_ node: OpaquePointer) -> String { cmark_node_get_type_string(node).map(String.init(cString:)) ?? "" }
-    private static func literal(_ node: OpaquePointer) -> String { cmark_node_get_literal(node).map(String.init(cString:)) ?? "" }
+    private static func type(_ node: Node) -> String { cmark_node_get_type_string(node).map(String.init(cString:)) ?? "" }
+    private static func literal(_ node: Node) -> String { cmark_node_get_literal(node).map(String.init(cString:)) ?? "" }
     private static func append(_ text: String, styles: Styles, link: URL?, runs: inout [Run]) {
         guard !text.isEmpty else { return }
         if let last = runs.last, last.styles == styles, last.link == link { runs[runs.count - 1].text += text }
