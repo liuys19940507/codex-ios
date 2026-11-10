@@ -6,7 +6,7 @@
 | --- | --- |
 | 原生共享 CLI 接管与退出后继续 | PASS，见[真实接管记录](live-attach.md)，同一个 app-server 承载任务，关闭 CLI/PowerShell 不结束任务 |
 | Windows 运行时与 API | PASS，当前私有 EasyTier 地址监听8391，认证 `/v1/info` 返回 API1/Codex0.167.0；共享原生服务器独立监听loopback8390 |
-| 手机覆盖更新与配对保留 | PASS，9cba691覆盖安装后用户确认原 Windows 连接保留，直接进入任务列表 |
+| 手机覆盖更新与配对保留 | PASS，e3c5408/build3覆盖后原连接可用，中文/emoji草稿保留且出现设置标签 |
 | 手机追加正在运行的 CLI 轮次 | PASS，原 thread/turn 中新增用户文字 `结束时请包含 PHONE_STEER_OK_20261110`，原轮次完成后的回复包含该标记 |
 | 手机处理原 CLI 命令审批 | PASS，批准一次打印标记并等待45秒的命令，原命令执行一次，退出码0；电脑没有代发输入或审批 |
 | 手机自动实时显示最终回复 | PASS，用户确认未手动刷新便出现两个标记的最终回复 |
@@ -16,11 +16,11 @@
 | 原生双连接重复审批 | PASS，原生接管探针证实已解决请求不会再次执行；手机与 CLI 同时点击的场景未单独执行 |
 | 输入超时/重连不重发 | PASS，Windows与iOS自动测试验证UUID持久化、只读核对与重复防护；不确定结果不冒充成功 |
 | 大字体、长输出、CRLF diff、子任务返回草稿 | PASS，181616d的[云端测试](https://github.com/liuys19940507/codex-ios/actions/runs/42732288469)：46项单元测试和6项UI测试，含对应回归 |
-| Windows干净依赖安装、单测、类型检查 | PASS，f23e4de的独立源码导出执行npm ci退出0、87/87测试通过、tsc退出0；导出避免替换运行中桥接的依赖 |
+| Windows干净依赖安装、单测、类型检查 | PASS，f23e4de独立源码导出npm ci退出0；2103cc6的完整89项测试、类型检查及[Windows CI](https://github.com/liuys19940507/codex-ios/actions/runs/42740238979)通过。历史首次发送也在启动轮次前完成订阅，不依赖手机额外刷新 |
 | Windows PowerShell完整测试 | PASS，Pester5.7.1，8/8通过，退出0 |
-| iOS前后台恢复与模型设置 | 软件PASS，[920bdad/run42734680247](https://github.com/liuys19940507/codex-ios/actions/runs/42734680247)51项单元测试、6项UI测试及arm64打包通过；当前手机9cba691不包含此版本，真机后台恢复仍待验证 |
-| 含中文/emoji草稿的覆盖更新 | NOT RUN，用户已留下“升级前草稿：中文😀”，等待build3覆盖后核对 |
-| Windows桥接重启 | PASS，仅重启已验证归属的桥接，原生PID10052保持；原手机操作UUID回执仍accepted。手机build3恢复检查仍待执行 |
+| iOS前后台恢复与模型设置 | PASS，e3c5408的[run42737599302](https://github.com/liuys19940507/codex-ios/actions/runs/42737599302)57项单元测试、7项UI测试及arm64打包；真实服务返回8个不同模型ID。用户确认build3后台/锁屏后自动同步，保留草稿 |
+| 含中文/emoji草稿的覆盖更新 | PASS，用户确认“升级前草稿：中文😀”在build3覆盖后及后台恢复后均保留 |
+| Windows桥接重启 | PASS，仅重启已验证归属的桥接，原生PID10052保持，手机操作UUID回执仍accepted；90秒命令继续完成，用户确认回前台自动看到最终标记 |
 | 多项目同时运行的实际 CLI | PASS，第二个真实远程CLI工作目录为独立worktree，返回PROJECT_TWO_OK；两项目列表互不混入，快照projectId正确。临时项目配置已在finally恢复，当前仅保留原项目 |
 | 实际签名续期/自动刷新 | NOT RUN，维护脚本返回daemon=running、renewal=unknown、evidenceAt=null，不把USB检测当作成功证据 |
 | Codex定时维护 | 用户选择暂不创建；交付[固定提示词模板](../codex-maintenance-task.md) |
@@ -35,3 +35,13 @@
 - 最终回复同时包含命令输出标记与手机追加标记。用户确认手机自动显示最终回复。
 
 此结果证明手机控制共享 CLI 的真实任务。它不证明任意独立 Codex 进程可以无迁移接入，也不替代上表仍为NOT RUN的设备验证。
+
+## build3后台与重启证据
+
+安装包：e3c5408/build3，SHA-256 `624bc604aee420ecbd0bb53226512e2107b26545953cbf818999882484f920df`。
+
+在同一CLI创建的thread中追加受控验证轮次`01a1c326-a02e-7a31-8463-ab6f787b1b4f`。手机批准一次“等待90秒后输出标记”的命令并进入后台；期间只重启桥接。原生PID10052保持，命令条目`exec-02f0d69a-efa0-44b1-81a1-348800bf393a`仅执行一次，耗时93946ms、退出码0、输出`CODEX_BACKGROUND_OK_20261110`，最终轮次completed。用户确认回前台自动同步并看到标记，草稿仍在。
+
+最初探针的等待期限包含了模型准备时间，早于命令结束到期；随后只读核对同一轮次的规范结果，没有重新执行测试任务。
+
+[最终源码审查与实施取舍](final-review.md)记录三项重要问题的回归修复及未验证边界。后续参考Android改进属于新的功能迭代，此记录作为首版验收检查点保留。
