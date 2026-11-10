@@ -85,7 +85,9 @@ final class ConnectionModel: ObservableObject {
         let server = try! ServerConfiguration(name: "Fixture Windows", address: "https://fixture.invalid")
         let store = ServerStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("CodexRemoteUITest/workspace.json"))
         try? store.save([server])
-        let model = ConnectionModel(servers: store)
+        let credentials = CredentialStore(backend: UITestKeychain())
+        try? credentials.save(token: "fixture-token", serverID: server.id)
+        let model = ConnectionModel(servers: store, credentials: credentials)
         model.activeServerID = server.id
         model.transport = UITestWorkspaceTransport(activity: ProcessInfo.processInfo.arguments.contains("--ui-test-activity"))
         model.info = ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "queue": false, "approvals": true])

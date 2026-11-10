@@ -36,6 +36,7 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
   t.after(async()=>{sync?.close();await rpc?.close();await server?.close();for(const store of stores)store.close();await rm(dir,{recursive:true,force:true});});
   const file=options.memory?':memory:':join(dir,'state.sqlite');
   const calls:string[]=[];
+  let loaded=!options.unloaded;
   const resumeParams:unknown[]=[];
   server=await fakeServer((socket,m)=>{
     if(handshake(socket,m))return;
@@ -44,7 +45,7 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
       return;
     }
     calls.push(m.method!);
-    if(m.method==='thread/loaded/list')socket.send(JSON.stringify({id:m.id,result:{data:options.unloaded?[]:['thread']}}));
+    if(m.method==='thread/loaded/list')socket.send(JSON.stringify({id:m.id,result:{data:loaded?['thread']:[]}}));
     else if(m.method==='thread/read')socket.send(JSON.stringify({id:m.id,result:{thread:{...resume.thread,status:{type:'notLoaded'},turns:[{id:'old',status:'completed',items:[{id:'history',type:'agentMessage',text:'history'}]}]}}}));
     else if(m.method==='thread/resume') {
       resumeParams.push(m.params);
@@ -61,7 +62,7 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
   await sync.snapshot('thread');
   const apply=(ordinal:number,message:Json)=>activeSync.applyEvent({connectionId:'fixture',ordinal,message});
   const item=()=>store.snapshot('thread').items.find(i=>i.id==='message')!;
-  return {file,store,sync:activeSync,apply,item,calls,stores,resumeParams};
+  return {file,store,sync:activeSync,apply,item,calls,stores,resumeParams,setLoaded:()=>{loaded=true;}};
 }
 
 test('announced_thread_still_attaches_before_treating_cached_state_as_live',async t=>{
@@ -150,6 +151,23 @@ test('unloaded_history_reads_do_not_resume_or_start_a_task',async t=>{
   const f=await fixture(t,{unloaded:true});
   assert.deepEqual(f.calls,['thread/loaded/list','thread/read']);
   assert.equal(f.store.snapshot('thread').items[0]?.text,'history');
+});
+
+test('read_only_history_revalidates_and_attaches_when_the_cli_later_resumes_it',async t=>{
+  const f=await fixture(t,{unloaded:true});
+  await f.sync.snapshot('thread');
+  assert.equal(f.calls.filter(method=>method==='thread/read').length,2,'Unloaded history must be revalidated without resuming it');
+  assert.equal(f.calls.includes('thread/resume'),false);
+  f.setLoaded();
+  const live=await f.sync.snapshot('thread');
+  assert.equal(live.thread.activeTurnId,'turn');
+  assert.equal(f.calls.filter(method=>method==='thread/resume').length,1);
+  await f.sync.snapshot('thread');
+  assert.equal(f.calls.filter(method=>method==='thread/resume').length,1,'A subscribed live thread should keep its barrier');
+  f.apply(1,delta('live output'));
+  f.apply(2,{method:'item/commandExecution/requestApproval',id:7,params:{threadId:'thread',turnId:'turn',availableDecisions:['accept']}});
+  assert.equal(f.store.snapshot('thread').items[0]?.text,'live output');
+  assert.equal(f.store.snapshot('thread').pending.length,1);
 });
 
 test('pending_preserves_original_rpc_id_and_resolution_is_idempotent',async t=>{

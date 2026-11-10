@@ -123,6 +123,41 @@ final class SyncTests: XCTestCase {
     }
 
     @MainActor
+    func testFinishedEventStreamReconnectsOnSameEpochSelection() async throws {
+        for failing in [false, true] {
+            let f = try await fixture()
+            f.bridge.feed.finish(failing: failing)
+            await eventually { f.store.connectionState == .failed }
+            await f.store.selectThread("thread")
+            await eventually { f.bridge.feed.streamCount == 2 }
+            f.bridge.feed.send(delta(1, "live again"))
+            await eventually { f.store.cursor?.seq == 1 }
+            XCTAssertEqual(f.store.snapshot?.items.first?.text, "live again")
+            await f.store.disconnect()
+        }
+    }
+
+    @MainActor
+    func testStreamFailureDuringSnapshotRestartsBeforeAcceptingLiveUpdates() async throws {
+        let f = try await fixture()
+        await f.bridge.holdNextSnapshot()
+        let selecting = Task { await f.store.selectThread("thread") }
+        let held = await f.bridge.waitForReads(2)
+        XCTAssertTrue(held)
+        f.bridge.feed.finish(failing: true)
+        await eventually { f.store.connectionState == .failed }
+        await f.bridge.release(base(text: "fresh", seq: 5))
+        await selecting.value
+        await eventually { f.bridge.feed.streamCount == 2 }
+        f.bridge.feed.send(delta(6, " stream"))
+        await eventually { f.store.cursor?.seq == 6 }
+        XCTAssertEqual(f.store.snapshot?.items.first?.text, "fresh stream")
+        let writes = await f.bridge.writes
+        XCTAssertEqual(writes, 0)
+        await f.store.disconnect()
+    }
+
+    @MainActor
     private func fixture(initial: Snapshot = base()) async throws -> (store: SessionStore, bridge: SyncTransport, server: ServerConfiguration, cursorURL: URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
@@ -194,5 +229,12 @@ private final class SyncFeed: @unchecked Sendable {
     func send(_ event: Envelope) {
         lock.lock(); let current = continuations; lock.unlock()
         for continuation in current { continuation.yield(.event(event)) }
+    }
+    func finish(failing: Bool) {
+        lock.lock(); let current = continuations; continuations = []; lock.unlock()
+        for continuation in current {
+            if failing { continuation.finish(throwing: URLError(.networkConnectionLost)) }
+            else { continuation.finish() }
+        }
     }
 }
