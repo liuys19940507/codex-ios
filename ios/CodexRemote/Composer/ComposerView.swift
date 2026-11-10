@@ -39,6 +39,9 @@ struct ComposerView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
+                if !compact, projectID != nil {
+                    Button("创建并发送") { Task { await send() } }.disabled(!enabled)
+                }
                 Spacer()
                 Button("收起键盘") { editing = false }
             }
@@ -59,7 +62,8 @@ struct ComposerView: View {
                 } else if features["steer"] == true { Text("发送后追加到当前轮次。").font(.footnote).foregroundStyle(.secondary) }
                 if features["queue"] != true { Text("未发送的内容保留为草稿，不会自动排队。").font(.footnote).foregroundStyle(.secondary) }
             }
-            Button {
+            if !editing || projectID == nil {
+              Button {
                 Task { await send() }
             } label: {
                 HStack {
@@ -68,6 +72,7 @@ struct ComposerView: View {
                 }.frame(minHeight: 44)
             }
             .buttonStyle(.borderedProminent).disabled(!enabled)
+            }
             Text(model.storageMessage ?? model.message ?? "草稿保存在本机，尚未提交。")
                 .font(.footnote).foregroundStyle(.secondary)
         }

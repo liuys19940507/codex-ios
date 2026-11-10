@@ -36,6 +36,7 @@ struct ActivityView: View {
     let item: Item
     let partial: Bool
     var onDraft: ((String) -> Void)? = nil
+    var onContentReady: (() -> Void)? = nil
     @State private var copied = false
     private var presentation: ActivityPresentation { ActivityPresentation.make(item: item) }
     var body: some View {
@@ -78,7 +79,7 @@ struct ActivityView: View {
                 }
             } else if !presentation.body.isEmpty {
                 if ["agentMessage", "reasoning", "plan"].contains(item.kind) {
-                    RichMessageView(text: item.kind == "reasoning" ? ReasoningSummary.make(item.text).body : presentation.body)
+                    RichMessageView(text: item.kind == "reasoning" ? ReasoningSummary.make(item.text).body : presentation.body, onRendered: onContentReady)
                 } else { CodeOutputView(text: presentation.body, title: presentation.title) }
             }
             if case .number(let code) = item.data.objectValue["exitCode"] { Text("退出码 \(Int(code))").font(.caption).foregroundStyle(.secondary) }

@@ -37,9 +37,9 @@ struct ConversationView: View {
                         if let message = session.historyMessage { Text(message).font(.footnote).foregroundStyle(.secondary) }
                         ForEach(ConversationTimeline.make(snapshot.items)) { row in
                             if row.kind == .process {
-                                ProcessView(items: row.items, active: snapshot.thread.activeTurnId == row.turnID, onDraft: draftAction).id(row.id)
+                                ProcessView(items: row.items, active: snapshot.thread.activeTurnId == row.turnID, onDraft: draftAction, onInteraction: { followingLatest = false }).id(row.id)
                             } else if let item = row.items.first {
-                                ActivityView(item: item, partial: snapshot.thread.activeTurnId == item.turnId, onDraft: draftAction).id(row.id)
+                                ActivityView(item: item, partial: snapshot.thread.activeTurnId == item.turnId, onDraft: draftAction, onContentReady: { scrollToLatestIfFollowing(proxy) }).id(row.id)
                             }
                         }
                         if let parent = snapshot.thread.parentId { NavigationLink("返回父任务", value: parent) }
@@ -66,21 +66,14 @@ struct ConversationView: View {
             .onPreferenceChange(ConversationBottomKey.self) { position in
                 bottomPosition = position
                 if readingGesture || Date() < manualScrollUntil { followingLatest = isNearBottom }
-                else if isNearBottom { followingLatest = true }
-                followIfNeeded(proxy)
             }
-            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0; followIfNeeded(proxy) }
+            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0 }
             .simultaneousGesture(DragGesture()
                 .updating($readingGesture) { _, state, _ in state = true }
                 .onChanged { _ in manualScrollUntil = Date().addingTimeInterval(2) }
                 .onEnded { _ in followingLatest = isNearBottom; manualScrollUntil = Date().addingTimeInterval(2) })
             .onChange(of: session.snapshot?.cursor) { _ in
-                guard followingLatest, !session.historyLoading, session.snapshot?.thread.id == threadID else { return }
-                Task { @MainActor in
-                    await Task.yield()
-                    guard followingLatest, session.selectedThreadID == threadID else { return }
-                    proxy.scrollTo("conversation-end", anchor: .bottom)
-                }
+                scrollToLatestIfFollowing(proxy)
             }
             .accessibilityAction(named: Text("停止自动跟随")) { followingLatest = false }
             .toolbar {
@@ -109,11 +102,11 @@ struct ConversationView: View {
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
     private var isNearBottom: Bool { composerPosition > 0 && bottomPosition <= composerPosition + 80 }
-    private func followIfNeeded(_ proxy: ScrollViewProxy) {
-        guard followingLatest, !readingGesture, Date() >= manualScrollUntil, !isNearBottom, composerPosition > 0, !session.historyLoading else { return }
+    private func scrollToLatestIfFollowing(_ proxy: ScrollViewProxy) {
+        guard followingLatest, !readingGesture, !session.historyLoading, session.snapshot?.thread.id == threadID else { return }
         Task { @MainActor in
             await Task.yield()
-            guard followingLatest, !readingGesture, Date() >= manualScrollUntil, session.selectedThreadID == threadID else { return }
+            guard followingLatest, !readingGesture, session.selectedThreadID == threadID else { return }
             proxy.scrollTo("conversation-end", anchor: .bottom)
         }
     }

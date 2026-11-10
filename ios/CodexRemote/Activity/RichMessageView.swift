@@ -10,6 +10,7 @@ private struct PlaceholderInlineImageProvider: InlineImageProvider {
 
 struct RichMessageView: View {
     let text: String
+    var onRendered: (() -> Void)? = nil
     @State private var blocks: [MessageBlock] = []
     @State private var showingAll = false
     @ScaledMetric(relativeTo: .body) private var fontSize = 17.0
@@ -18,11 +19,11 @@ struct RichMessageView: View {
             ForEach(blocks) { block in
                 if block.kind == .code {
                     CodeOutputView(text: block.content, language: block.language ?? "代码", title: "代码")
-                    if !block.complete { Text("代码仍在输出…").font(.caption).foregroundStyle(.secondary) }
+                    if !block.complete { Text("代码块未闭合").font(.caption).foregroundStyle(.secondary) }
                 } else {
                     Markdown(String(block.content.prefix(16000)))
                         .markdownTheme(.gitHub)
-                        .markdownTextStyle { FontSize(fontSize) }
+                        .markdownTextStyle { FontSize(fontSize); BackgroundColor(.clear); ForegroundColor(.primary) }
                         .markdownBlockStyle(\.codeBlock) { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
                         .markdownImageProvider(PlaceholderImageProvider())
                         .markdownInlineImageProvider(PlaceholderInlineImageProvider())
@@ -41,6 +42,9 @@ struct RichMessageView: View {
             let parsed = await Task.detached(priority: .userInitiated) { MessageDocument.parse(text) }.value
             guard !Task.isCancelled else { return }
             blocks = parsed
+            try? await Task.sleep(nanoseconds: 16_000_000)
+            guard !Task.isCancelled else { return }
+            onRendered?()
         }
         .sheet(isPresented: $showingAll) { RawOutputSheet(title: "完整回复", text: text) }
     }

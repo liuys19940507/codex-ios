@@ -4,13 +4,14 @@ struct ProcessView: View {
     let items: [Item]
     let active: Bool
     var onDraft: ((String) -> Void)? = nil
+    var onInteraction: (() -> Void)? = nil
     @State private var expanded = false
     private var commands: Int { items.filter { $0.kind == "commandExecution" }.count }
     private var files: Int { items.filter { $0.kind == "fileChange" || $0.kind == "diff" }.count }
     private var failed: Int { items.filter { $0.data.objectValue["status"]?.stringValue == "failed" }.count }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button { expanded.toggle() } label: {
+            Button { onInteraction?(); expanded.toggle() } label: {
                 HStack(spacing: 10) {
                     if active { ProgressView() } else { Image(systemName: "list.bullet.rectangle") }
                     VStack(alignment: .leading, spacing: 4) {
