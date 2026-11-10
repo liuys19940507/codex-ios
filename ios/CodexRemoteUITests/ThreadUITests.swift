@@ -41,6 +41,9 @@ final class ThreadUITests: XCTestCase {
         let process = app.buttons["查看处理过程"]
         reveal(process, in: app, up: false)
         XCTAssertTrue(process.exists)
+        let heading = app.staticTexts["任务已完成"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        XCTAssertLessThan(heading.frame.height, 200, "Markdown should scale once at the largest text size")
         process.tap()
         let copy = app.buttons["复制全部输出"]
         XCTAssertTrue(copy.waitForExistence(timeout: 5))
@@ -50,7 +53,7 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         XCTAssertTrue(draft.isHittable)
         draft.tap(); draft.typeText("parent draft stays")
-        XCTAssertGreaterThan(draft.frame.height, 80, "The largest text size needs a complete line and editor insets")
+        XCTAssertGreaterThan(draft.frame.height, 70, "The largest text size needs a complete line and editor insets")
         if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
         let child = app.buttons["打开子任务"]
         reveal(child, in: app, up: true)

@@ -52,7 +52,12 @@ struct ComposerView: View {
         .toolbar {
             if projectID != nil {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("创建并发送") { Task { await send() } }.disabled(!enabled)
+                    Button("创建并发送") {
+                        #if DEBUG
+                        CreateDiagnostics.shared.record("button")
+                        #endif
+                        Task { await send() }
+                    }.disabled(!enabled)
                 }
             }
             ToolbarItemGroup(placement: .keyboard) {
@@ -122,8 +127,14 @@ struct ComposerView: View {
     }
     private func send() async {
         if let projectID {
+            #if DEBUG
+            CreateDiagnostics.shared.record("send ready=\(settings.canCreate) writable=\(model.writable) length=\(model.text.count)")
+            #endif
             guard settings.canCreate else { return }
             let result = await model.submitCreate(using: sender, projectID: projectID, model: settings.selection?.modelID, reasoning: settings.selection?.reasoning)
+            #if DEBUG
+            CreateDiagnostics.shared.record("receipt=\(String(describing: result?.state))")
+            #endif
             if result?.state == .accepted, case .object(let data) = result?.result, case .string(let id) = data["threadId"] { onCreated?(id) }
         } else if let snapshot {
             let result = await model.submitInput(using: sender, snapshot: snapshot, mode: chosenMode, features: features)
@@ -146,6 +157,9 @@ struct NewTaskView: View {
     @EnvironmentObject private var settings: ModelSettings
     @Environment(\.dismiss) private var dismiss
     @State private var projectID: String
+    #if DEBUG
+    @ObservedObject private var creationDiagnostics = CreateDiagnostics.shared
+    #endif
     init(projects: [Project], serverID: UUID, selectedProjectID: String?, openThread: @escaping (String) -> Void) {
         self.projects = projects; self.serverID = serverID; self.openThread = openThread
         _projectID = State(initialValue: selectedProjectID ?? projects.first?.id ?? "")
@@ -161,6 +175,11 @@ struct NewTaskView: View {
                 Section { NewTaskDraftView(serverID: serverID, project: project, openThread: openThread).id(project.id) }
             } else { Text("请先在 Windows 配置允许访问的项目，再刷新列表。") }
             Section { OperationStatusView(openThread: openThread) }
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-workspace") {
+                Section { Text(creationDiagnostics.message).accessibilityIdentifier("创建诊断") }
+            }
+            #endif
         }
         .navigationTitle("新任务").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(sender.busy) } }
@@ -179,3 +198,16 @@ private struct NewTaskDraftView: View {
     }
     var body: some View { ComposerView(model: model, projectID: project.id, onCreated: openThread) }
 }
+
+#if DEBUG
+@MainActor
+private final class CreateDiagnostics: ObservableObject {
+    static let shared = CreateDiagnostics()
+    @Published private(set) var message = "no action"
+    private var events: [String] = []
+    func record(_ stage: String) {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-test-workspace") else { return }
+        events.append(stage); message = events.suffix(8).joined(separator: " | ")
+    }
+}
+#endif

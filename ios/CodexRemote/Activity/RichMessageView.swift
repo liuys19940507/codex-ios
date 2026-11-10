@@ -13,7 +13,8 @@ struct RichMessageView: View {
     var onRendered: (() -> Void)? = nil
     @State private var blocks: [MessageBlock] = []
     @State private var showingAll = false
-    @ScaledMetric(relativeTo: .body) private var fontSize = 17.0
+    // MarkdownUI's ScaledFontSizeModifier applies Dynamic Type itself.
+    private let fontSize: CGFloat = 17
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(blocks) { block in
