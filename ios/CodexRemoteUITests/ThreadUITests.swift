@@ -157,7 +157,11 @@ final class ThreadUITests: XCTestCase {
                 observations.append("band=\(top)...\(bottom) frame=\(frame) hittable=\(element.isHittable)")
                 if frame.minY >= top, frame.maxY <= bottom, element.isHittable { return }
                 direction = frame.midY > middle
-                distance = max(40, min(150, abs(frame.midY - middle)))
+                let remaining = abs(frame.midY - middle)
+                // Eager rows have frames thousands of points offscreen. Travel
+                // by the viewport until close, then keep the precise small drag.
+                let limit = remaining > bottom - top ? (bottom - top) * 0.8 : 150
+                distance = max(40, min(limit, remaining))
             } else { observations.append("band=\(top)...\(bottom) target not mounted") }
             guard attempt < 32 else { break }
             swipeConversation(app, up: direction, maximumDistance: distance)
