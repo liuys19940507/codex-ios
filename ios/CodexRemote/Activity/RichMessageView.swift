@@ -28,15 +28,6 @@ struct RichMessageView: View {
                             FontSize(fontSize); BackgroundColor(nil); ForegroundColor(.primary)
                         })
                         .markdownBlockStyle(\.codeBlock) { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
-                        .markdownBlockStyle(\.table) { config in
-                            // Resolve table cell anchors in a separate viewport
-                            // with content-sized columns, independent of history.
-                            ScrollView(.horizontal) {
-                                config.label.fixedSize(horizontal: true, vertical: true)
-                                    .markdownTableBorderStyle(.init(color: .secondary.opacity(0.3)))
-                                    .markdownTableBackgroundStyle(.alternatingRows(.clear, Color(uiColor: .secondarySystemBackground)))
-                            }.markdownMargin(top: 0, bottom: 16)
-                        }
                         .markdownImageProvider(PlaceholderImageProvider())
                         .markdownInlineImageProvider(PlaceholderInlineImageProvider())
                         .textSelection(.enabled)
