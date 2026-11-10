@@ -28,6 +28,10 @@ struct RichMessageView: View {
                             FontSize(fontSize); BackgroundColor(nil); ForegroundColor(.primary)
                         })
                         .markdownBlockStyle(\.codeBlock) { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
+                        .markdownBlockStyle(\.table) { config in
+                            NativeMarkdownTableView(html: config.content.renderHTML(), fallback: config.content.renderMarkdown())
+                                .markdownMargin(top: 0, bottom: 16)
+                        }
                         .markdownImageProvider(PlaceholderImageProvider())
                         .markdownInlineImageProvider(PlaceholderInlineImageProvider())
                         .textSelection(.enabled)
