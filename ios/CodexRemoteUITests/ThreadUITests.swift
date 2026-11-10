@@ -38,12 +38,13 @@ final class ThreadUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
         app.staticTexts["Fixture task"].tap()
+        XCTAssertTrue(app.textViews["任务草稿"].waitForExistence(timeout: 5))
+        let heading = app.staticTexts["任务已完成"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10), "Wait for the initial Markdown layout before navigating older history")
+        XCTAssertLessThan(heading.frame.height, 200, "Markdown should scale once at the largest text size")
         let process = app.buttons["查看处理过程"]
         reveal(process, in: app, up: false)
         XCTAssertTrue(process.exists)
-        let heading = app.staticTexts["任务已完成"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 5))
-        XCTAssertLessThan(heading.frame.height, 200, "Markdown should scale once at the largest text size")
         let largeText = XCTAttachment(screenshot: app.screenshot())
         largeText.name = "conversation-largest-text"; largeText.lifetime = .keepAlways; add(largeText)
         process.tap()
