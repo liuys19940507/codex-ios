@@ -34,6 +34,10 @@ final class ThreadUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
         app.staticTexts["Fixture task"].tap()
+        let process = app.buttons["查看处理过程"]
+        for _ in 0..<12 where !process.isHittable { app.swipeDown() }
+        XCTAssertTrue(process.exists)
+        process.tap()
         let copy = app.buttons["复制全部输出"]
         XCTAssertTrue(copy.waitForExistence(timeout: 5))
         for _ in 0..<5 where !copy.isHittable { app.swipeUp() }
@@ -42,8 +46,9 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         for _ in 0..<8 where !draft.isHittable { app.swipeUp() }
         draft.tap(); draft.typeText("parent draft stays")
+        if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
         let child = app.buttons["打开子任务"]
-        for _ in 0..<8 where !child.isHittable { app.swipeDown() }
+        for _ in 0..<10 where !child.isHittable { app.swipeUp() }
         child.tap()
         XCTAssertTrue(app.navigationBars["Child fixture task"].waitForExistence(timeout: 10))
         app.navigationBars.buttons.element(boundBy: 0).tap()

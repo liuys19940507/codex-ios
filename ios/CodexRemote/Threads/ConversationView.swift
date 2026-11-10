@@ -9,6 +9,11 @@ struct ConversationView: View {
     @EnvironmentObject private var lifecycle: LifecycleController
     @StateObject private var composer: ComposerModel
     @State private var title = "会话"
+    @State private var followingLatest = true
+    @State private var bottomPosition: CGFloat = .greatestFiniteMagnitude
+    @State private var composerPosition: CGFloat = 0
+    @State private var manualScrollUntil = Date.distantPast
+    @GestureState private var readingGesture = false
     init(threadID: String, serverID: UUID, drafts: DraftStore = DraftStore()) {
         self.threadID = threadID; self.serverID = serverID
         _composer = StateObject(wrappedValue: ComposerModel(serverID: serverID, threadID: threadID, drafts: drafts))
@@ -21,7 +26,7 @@ struct ConversationView: View {
                         if let reason = snapshot.readOnlyReason { Label(reason, systemImage: "desktopcomputer").font(.callout).foregroundStyle(.secondary) }
                         if snapshot.itemsCursor != nil {
                             Button {
-                                let anchor = snapshot.items.first?.id
+                                let anchor = ConversationTimeline.make(snapshot.items).first?.id
                                 Task {
                                     await session.loadMoreHistory(); await Task.yield()
                                     if let anchor { proxy.scrollTo(anchor, anchor: .top) }
@@ -30,8 +35,12 @@ struct ConversationView: View {
                             .disabled(session.historyLoading)
                         }
                         if let message = session.historyMessage { Text(message).font(.footnote).foregroundStyle(.secondary) }
-                        ForEach(snapshot.items) { item in
-                            ActivityView(item: item, partial: snapshot.thread.activeTurnId == item.turnId).id(item.id)
+                        ForEach(ConversationTimeline.make(snapshot.items)) { row in
+                            if row.kind == .process {
+                                ProcessView(items: row.items, active: snapshot.thread.activeTurnId == row.turnID, onDraft: draftAction).id(row.id)
+                            } else if let item = row.items.first {
+                                ActivityView(item: item, partial: snapshot.thread.activeTurnId == item.turnId, onDraft: draftAction).id(row.id)
+                            }
                         }
                         if let parent = snapshot.thread.parentId { NavigationLink("返回父任务", value: parent) }
                         ForEach(snapshot.pending) { request in
@@ -44,11 +53,35 @@ struct ConversationView: View {
                             Button("重新同步") { Task { await lifecycle.setActive(true); if lifecycle.ready { await session.selectThread(threadID) } } }
                         }
                     }
-                    ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: lifecycle.info?.features ?? [:])
                     OperationStatusView()
                     Color.clear.frame(height: 1).id("conversation-end")
+                        .background(GeometryReader { value in Color.clear.preference(key: ConversationBottomKey.self, value: value.frame(in: .global).maxY) })
                 }.padding()
             }.scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: lifecycle.info?.features ?? [:], compact: true)
+                    .padding(.horizontal, 12).padding(.vertical, 8).background(.bar)
+                    .background(GeometryReader { value in Color.clear.preference(key: ConversationComposerKey.self, value: value.frame(in: .global).minY) })
+            }
+            .onPreferenceChange(ConversationBottomKey.self) { position in
+                bottomPosition = position
+                if readingGesture || Date() < manualScrollUntil { followingLatest = isNearBottom }
+                else if isNearBottom { followingLatest = true }
+            }
+            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0 }
+            .simultaneousGesture(DragGesture()
+                .updating($readingGesture) { _, state, _ in state = true }
+                .onChanged { _ in manualScrollUntil = Date().addingTimeInterval(2) }
+                .onEnded { _ in followingLatest = isNearBottom; manualScrollUntil = Date().addingTimeInterval(2) })
+            .onChange(of: session.snapshot?.cursor) { _ in
+                guard followingLatest, !session.historyLoading, session.snapshot?.thread.id == threadID else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    guard followingLatest, session.selectedThreadID == threadID else { return }
+                    proxy.scrollTo("conversation-end", anchor: .bottom)
+                }
+            }
+            .accessibilityAction(named: Text("停止自动跟随")) { followingLatest = false }
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
@@ -64,7 +97,7 @@ struct ConversationView: View {
                         } label: { Image(systemName: "stop.circle") }
                         .accessibilityLabel("中断当前轮次").disabled(sender.busy || !sender.canSubmit(.interrupt))
                     }
-                    Button { proxy.scrollTo("conversation-end", anchor: .bottom) } label: { Image(systemName: "arrow.down.to.line") }
+                    Button { manualScrollUntil = .distantPast; followingLatest = true; proxy.scrollTo("conversation-end", anchor: .bottom) } label: { Image(systemName: "arrow.down.to.line") }
                         .accessibilityLabel("查看最新输出")
                 }
             }
@@ -74,4 +107,18 @@ struct ConversationView: View {
         .task(id: threadID) { await session.openThread(threadID) }
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
+    private var isNearBottom: Bool { composerPosition > 0 && bottomPosition <= composerPosition + 80 }
+    private var draftAction: ((String) -> Void)? {
+        guard composer.writable else { return nil }
+        return { text in composer.text += composer.text.isEmpty ? text : "\n\n" + text }
+    }
+}
+
+private struct ConversationBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+private struct ConversationComposerKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
