@@ -10,7 +10,7 @@ import { connectRpc } from '../src/protocol/rpc-client.js';
 import { ApiError } from '../src/api/validation.js';
 import { fakeServer, handshake } from './support/fake-server.js';
 
-async function fixture(t:TestContext) {
+async function fixture(t:TestContext,options:{loaded?:boolean}={}) {
   const dir=await mkdtemp(join(tmpdir(),'codex-query-')),calls:{method:string;params:any}[]=[];
   const projects=[{id:'project',name:'Controlled',path:'C:/controlled/project'}];
   const parent={id:'parent',cwd:projects[0]!.path,name:'Parent',preview:'',status:{type:'notLoaded'},parentThreadId:null,turns:[]};
@@ -21,8 +21,8 @@ async function fixture(t:TestContext) {
     calls.push({method:m.method!,params:m.params});
     const p=m.params as any;
     const result=m.method==='thread/list'?{data:[parent,child,foreign],nextCursor:p.cursor?null:'next'}:
-      m.method==='thread/loaded/list'?{data:[]}:
-      m.method==='thread/read'?{thread:{...(p.threadId==='foreign'?foreign:parent),turns:p.includeTurns?[{id:'turn-old',status:'completed',items:Array.from({length:75},(_,i)=>({id:`item-${i}`,type:'agentMessage',text:`history ${i}`}))}]:[]},secretField:'do-not-expose'}:
+      m.method==='thread/loaded/list'?{data:options.loaded?['parent']:[]}:
+      m.method==='thread/read'||m.method==='thread/resume'?{thread:{...(p.threadId==='foreign'?foreign:parent),turns:p.includeTurns||m.method==='thread/resume'?[{id:'turn-old',status:'completed',items:Array.from({length:75},(_,i)=>({id:`item-${i}`,type:'agentMessage',text:`history ${i}`}))}]:[]},secretField:'do-not-expose'}:
       m.method==='model/list'?{data:[{id:'catalog-id',model:'available-model',displayName:'Available',hidden:false,supportedReasoningEfforts:[{reasoningEffort:'medium'}]}],nextCursor:null}:{};
     socket.send(JSON.stringify({id:m.id,result}));
   });
@@ -82,8 +82,8 @@ test('model_choices_use_real_request_ids_and_server_reasoning_choices',async t=>
   assert.deepEqual(await f.queries.queryModels(),[{id:'available-model',name:'Available',reasoning:['medium']}]);
 });
 
-test('cached_history_title_refreshes_without_discarding_observed_output_or_turn',async t=>{
-  const f=await fixture(t);
+test('subscribed_title_refreshes_without_discarding_observed_output_or_turn',async t=>{
+  const f=await fixture(t,{loaded:true});
   await f.queries.querySnapshot('parent');
   const cached=f.store.snapshot('parent');
   cached.items[cached.items.length-1]!.text='recorded partial prefix';
@@ -94,5 +94,5 @@ test('cached_history_title_refreshes_without_discarding_observed_output_or_turn'
   assert.equal(refreshed.thread.title,'Renamed history');
   assert.equal(refreshed.thread.activeTurnId,'controlled-live-turn');
   assert.equal(refreshed.items.at(-1)!.text,'recorded partial prefix');
-  assert.equal(f.calls.some(c=>c.method==='thread/resume'),false);
+  assert.equal(f.calls.filter(c=>c.method==='thread/resume').length,1);
 });

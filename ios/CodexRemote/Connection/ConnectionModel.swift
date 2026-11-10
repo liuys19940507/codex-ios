@@ -73,10 +73,31 @@ final class ConnectionModel: ObservableObject {
         }
     }
 
-    func disconnect() async {
+    func delete(serverID: UUID) async throws {
+        guard servers.contains(where: { $0.id == serverID }) else { return }
+        let previous = servers, remaining = servers.filter { $0.id != serverID }
+        // Persist first: a failed file write must never remove the credential.
+        try serverStore.save(remaining)
+        do { try credentials.delete(serverID: serverID) }
+        catch {
+            let credentialError = error
+            do { try serverStore.save(previous) }
+            catch {
+                servers = remaining
+                let failure = ClientCommandError(message: "连接已移除，但未能删除配对令牌或恢复列表，请检查设备存储后重试。")
+                if activeServerID == serverID { activeServerID = nil; await disconnect(message: failure.message) }
+                throw failure
+            }
+            throw credentialError
+        }
+        servers = remaining
+        if activeServerID == serverID { activeServerID = nil; await disconnect() }
+    }
+
+    func disconnect(message: String? = nil) async {
         generation = UUID()
         let previous = transport
-        transport = nil; info = nil; status = .disconnected; message = nil
+        transport = nil; info = nil; status = .disconnected; self.message = message
         await previous?.close()
     }
 

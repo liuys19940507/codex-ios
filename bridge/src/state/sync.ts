@@ -75,7 +75,10 @@ export class SyncService {
       if(snap.thread.id!==threadId)throw new ApiError(503,'upstream_invalid','Snapshot identity mismatch');
       const ids=new Set(snap.items.map(item=>item.id));
       const buffered=this.buffers.get(threadId)??[];
-      this.buffers.delete(threadId);this.ready.add(threadId);
+      this.buffers.delete(threadId);
+      // A read-only history snapshot has no upstream subscription. Recheck
+      // loaded state on its next read so a CLI-resumed task can be attached.
+      if(isLoaded)this.ready.add(threadId);
       for(const frame of buffered) {
         const msg=object(frame.message),p=object(msg.params),id=String(p.itemId??object(p.item).id??'');
         // Canonical snapshot items already include pre-barrier changes. In the

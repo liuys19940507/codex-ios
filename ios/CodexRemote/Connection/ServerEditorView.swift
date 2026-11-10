@@ -71,6 +71,9 @@ struct ConnectionView: View {
     @EnvironmentObject private var connection: ConnectionModel
     @State private var adding = false
     @State private var editing: ServerConfiguration?
+    @State private var deleting: ServerConfiguration?
+    @State private var deletingBusy = false
+    @State private var failure: String?
 
     var body: some View {
         List {
@@ -119,6 +122,12 @@ struct ConnectionView: View {
                             .disabled(connection.status == .connecting)
                         }
                         .padding(.vertical, 4)
+                        .contextMenu {
+                            Button("删除连接", role: .destructive) { deleting = server }.disabled(deletingBusy)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) { deleting = server } label: { Label("删除连接", systemImage: "trash") }.disabled(deletingBusy)
+                        }
                     }
                 }
             }
@@ -142,5 +151,21 @@ struct ConnectionView: View {
         }
         .sheet(isPresented: $adding) { NavigationStack { ServerEditorView() }.environmentObject(connection) }
         .sheet(item: $editing) { server in NavigationStack { ServerEditorView(server: server) }.environmentObject(connection) }
+        .confirmationDialog("删除此连接？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            if let target = deleting {
+                Button("确认删除", role: .destructive) {
+                    deletingBusy = true
+                    Task { @MainActor in
+                        do { try await connection.delete(serverID: target.id) }
+                        catch { failure = error.localizedDescription }
+                        deletingBusy = false
+                    }
+                }
+            }
+            Button("取消", role: .cancel) { deleting = nil }
+        } message: { Text("将移除此连接和保存的配对令牌，之后需要重新添加连接。") }
+        .alert("无法删除连接", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+            Button("好") { failure = nil }
+        } message: { Text(failure ?? "") }
     }
 }

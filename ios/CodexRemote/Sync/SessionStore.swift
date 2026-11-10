@@ -98,6 +98,9 @@ final class SessionStore: ObservableObject {
         stream?.cancel()
         let identifier = UUID(); streamID = identifier
         stream = Task { [weak self] in
+            defer {
+                if self?.generation == connection && self?.streamID == identifier { self?.stream = nil }
+            }
             do {
                 for try await frame in transport.events(after: after) {
                     guard !Task.isCancelled, let self, self.generation == connection, self.streamID == identifier else { return }
