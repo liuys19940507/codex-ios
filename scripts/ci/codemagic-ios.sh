@@ -2,6 +2,10 @@
 set -euo pipefail
 mkdir -p build
 git rev-parse HEAD > build/commit.txt
+if [[ -n "${CODEX_IOS_ONLY_TESTING:-}" ]]; then
+    echo 'Filtered diagnostic tests cannot produce a release package.' >&2
+    exit 2
+fi
 
 test_status=0
 bash scripts/ci/test-ios.sh 2>&1 | tee build/ios-test.log || test_status=$?

@@ -57,3 +57,4 @@ run_case missing_result 1 no no HAS_RESULT=0
 run_case invalid_summary 1 no yes SUMMARY_STATUS=1
 run_case export_failure 9 no yes EXPORT_STATUS=9
 run_case passing_tests_package 0 yes yes
+run_case filtered_tests_never_package 2 no no CODEX_IOS_ONLY_TESTING=CodexRemoteUITests/ThreadUITests

@@ -1,5 +1,24 @@
 # yaml-language-server: $schema=https://codemagic.io/codemagic-schema.json
 workflows:
+  ios-diagnose-approval:
+    name: Codex Remote - approval hang diagnosis only
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    environment:
+      xcode: "26.3"
+    cache:
+      cache_paths:
+        - build/SourcePackages
+    scripts:
+      - name: Install pinned XcodeGen
+        script: bash scripts/ci/install-xcodegen.sh
+      - name: Reproduce approval and sample simulator process
+        script: bash scripts/ci/diagnose-approval.sh
+    artifacts:
+      - build/commit.txt
+      - build/ios-test.log
+      - build/approval-diagnostics.zip
+      - build/ios-screenshots.zip
   ios-verify-package:
     name: Codex Remote - test and unsigned IPA
     instance_type: mac_mini_m2

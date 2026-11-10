@@ -28,6 +28,10 @@ PY
 )"
 xcrun simctl boot "$simulator_id"
 xcrun simctl bootstatus "$simulator_id" -b
-xcodebuild test -project ios/CodexRemote.xcodeproj -scheme CodexRemote \
+test_arguments=(-scheme CodexRemote)
+if [[ -n "${CODEX_IOS_ONLY_TESTING:-}" ]]; then
+  test_arguments+=("-only-testing:$CODEX_IOS_ONLY_TESTING")
+fi
+xcodebuild test -project ios/CodexRemote.xcodeproj "${test_arguments[@]}" \
   -destination "platform=iOS Simulator,id=$simulator_id" \
   -resultBundlePath build/CodexRemote.xcresult "${swift_package_arguments[@]}" CODE_SIGNING_ALLOWED=NO

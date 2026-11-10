@@ -13,7 +13,7 @@ struct ProcessView: View {
         VStack(alignment: .leading, spacing: 14) {
             Button { onInteraction?(); expanded.toggle() } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: active ? "hourglass" : "list.bullet.rectangle")
+                    if active { ProgressView() } else { Image(systemName: "list.bullet.rectangle") }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(active ? "正在处理" : "查看处理过程").font(.callout.weight(.medium))
                         Text(summary).font(.caption).foregroundStyle(.secondary)
