@@ -11,6 +11,9 @@ settings:
     MARKETING_VERSION: '0.1.0'
     CURRENT_PROJECT_VERSION: '4'
 packages:
+  CMark:
+    url: https://github.com/swiftlang/swift-cmark
+    exactVersion: 0.9.0
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     exactVersion: 2.4.1
@@ -23,6 +26,10 @@ targets:
         excludes: [Resources/Info.plist]
     dependencies:
       - package: MarkdownUI
+      - package: CMark
+        product: cmark-gfm
+      - package: CMark
+        product: cmark-gfm-extensions
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.liuys.codexremote

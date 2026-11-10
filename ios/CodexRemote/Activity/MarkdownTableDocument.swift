@@ -1,4 +1,6 @@
 import Foundation
+import cmark_gfm
+import cmark_gfm_extensions
 
 struct MarkdownTableDocument: Equatable {
     enum Alignment: Equatable { case leading, center, trailing }
@@ -26,135 +28,100 @@ struct MarkdownTableDocument: Equatable {
     let rows: [Row]
     var columnCount: Int { rows.first?.cells.count ?? 0 }
 
-    // Input is the existing Markdown parser's table HTML, never a URL.
-    // Unsupported structure returns nil so the caller displays the whole table
-    // as text. Original message bytes remain the authority for message copying.
-    static func parse(html: String) -> Self? {
-        guard html.range(of: "<!DOCTYPE", options: .caseInsensitive) == nil,
-              html.range(of: "<!ENTITY", options: .caseInsensitive) == nil else { return nil }
-        let delegate = TableHTMLParser()
-        let parser = XMLParser(data: Data(html.utf8))
-        parser.shouldResolveExternalEntities = false
-        parser.delegate = delegate
-        guard parser.parse() else { return nil }
-        return delegate.document
-    }
-}
-
-private final class TableHTMLParser: NSObject, XMLParserDelegate {
-    private typealias Document = MarkdownTableDocument
-    private struct Context {
-        var styles: Document.Styles = []
-        var link: URL?
-    }
-    private struct Frame { let tag: String; let context: Context }
-    private final class CellBuffer {
-        var runs: [Document.Run] = []
-        let alignment: Document.Alignment
-        let header: Bool
-        init(alignment: Document.Alignment, header: Bool) { self.alignment = alignment; self.header = header }
-    }
-    private var frames: [Frame] = []
-    private var rows: [Document.Row] = []
-    private var cells: [Document.Cell]?
-    private var headers: [Bool] = []
-    private var cell: CellBuffer?
-    private var valid = true
-    private var seenTable = false
-    private var closedTable = false
-    private let textParents: Set<String> = ["th", "td", "strong", "b", "em", "i", "code", "del", "s", "a"]
-    var document: MarkdownTableDocument? {
-        guard valid, closedTable, frames.isEmpty, cells == nil, cell == nil, !rows.isEmpty else { return nil }
-        return MarkdownTableDocument(rows: rows)
-    }
-
-    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes: [String: String]) {
-        guard valid else { return }
-        let tag = elementName.lowercased(), parent = frames.last?.tag
-        var context = frames.last?.context ?? Context()
-        switch tag {
-        case "table":
-            guard parent == nil, !seenTable else { reject(parser); return }
-            seenTable = true
-        case "thead", "tbody", "tfoot":
-            guard parent == "table" else { reject(parser); return }
-        case "tr":
-            guard ["table", "thead", "tbody", "tfoot"].contains(parent ?? ""), cells == nil else { reject(parser); return }
-            cells = []; headers = []
-        case "th", "td":
-            guard parent == "tr", cell == nil else { reject(parser); return }
-            let alignment: Document.Alignment
-            switch attributes["align"]?.lowercased() {
-            case "center": alignment = .center
-            case "right": alignment = .trailing
-            default: alignment = .leading
+    // MarkdownUI's canonical Markdown preserves table cells; its HTML export
+    // with the pinned cmark version omits cell tags. Read the same pinned GFM
+    // parser's public tree directly, without guessing boundaries from text.
+    static func parse(markdown: String) -> Self? {
+        guard markdown.range(of: "<!DOCTYPE", options: .caseInsensitive) == nil,
+              markdown.range(of: "<!ENTITY", options: .caseInsensitive) == nil else { return nil }
+        cmark_gfm_core_extensions_ensure_registered()
+        guard let parser = cmark_parser_new(CMARK_OPT_DEFAULT) else { return nil }
+        defer { cmark_parser_free(parser) }
+        for name in ["table", "strikethrough", "autolink", "tagfilter", "tasklist"] {
+            guard let syntax = cmark_find_syntax_extension(name) else { return nil }
+            cmark_parser_attach_syntax_extension(parser, syntax)
+        }
+        cmark_parser_feed(parser, markdown, markdown.utf8.count)
+        guard let document = cmark_parser_finish(parser) else { return nil }
+        defer { cmark_node_free(document) }
+        guard let table = cmark_node_first_child(document), type(table) == "table", cmark_node_next(table) == nil else { return nil }
+        let count = Int(cmark_gfm_extensions_get_table_columns(table))
+        guard count > 0, let alignments = cmark_gfm_extensions_get_table_alignments(table) else { return nil }
+        var rows: [Row] = [], row = cmark_node_first_child(table)
+        while let current = row {
+            guard ["table_header", "table_row"].contains(type(current)) else { return nil }
+            var cells: [Cell] = [], node = cmark_node_first_child(current)
+            while let currentCell = node {
+                guard type(currentCell) == "table_cell", cells.count < count else { return nil }
+                var runs: [Run] = []
+                guard readChildren(currentCell, styles: [], link: nil, depth: 0, runs: &runs) else { return nil }
+                let alignment: Alignment
+                switch alignments[cells.count] { case 99: alignment = .center; case 114: alignment = .trailing; default: alignment = .leading }
+                cells.append(Cell(runs: runs, alignment: alignment))
+                node = cmark_node_next(currentCell)
             }
-            cell = CellBuffer(alignment: alignment, header: tag == "th")
-        default:
-            guard cell != nil, textParents.contains(parent ?? "") else { reject(parser); return }
-            switch tag {
-            case "strong", "b": context.styles.insert(.strong)
-            case "em", "i": context.styles.insert(.emphasis)
-            case "code": context.styles.insert(.code)
-            case "del", "s": context.styles.insert(.strikethrough)
-            case "a": context.link = safeLink(attributes["href"])
-            case "br", "img": break
-            default: reject(parser); return
+            guard cells.count == count else { return nil }
+            rows.append(Row(cells: cells, isHeader: cmark_gfm_extensions_get_table_row_is_header(current) != 0))
+            row = cmark_node_next(current)
+        }
+        return rows.isEmpty ? nil : Self(rows: rows)
+    }
+
+    private static func readChildren(_ parent: OpaquePointer, styles: Styles, link: URL?, depth: Int, runs: inout [Run]) -> Bool {
+        guard depth < 64 else { return false }
+        var node = cmark_node_first_child(parent)
+        while let current = node {
+            switch type(current) {
+            case "text": append(literal(current), styles: styles, link: link, runs: &runs)
+            case "code": append(literal(current), styles: styles.union(.code), link: link, runs: &runs)
+            case "softbreak", "linebreak": append("\n", styles: styles, link: link, runs: &runs)
+            case "emph", "strong", "strikethrough", "link":
+                var next = styles, target = link
+                switch type(current) {
+                case "emph": next.insert(.emphasis)
+                case "strong": next.insert(.strong)
+                case "strikethrough": next.insert(.strikethrough)
+                default: target = safeLink(cmark_node_get_url(current).map(String.init(cString:)))
+                }
+                guard readChildren(current, styles: next, link: target, depth: depth + 1, runs: &runs) else { return false }
+            case "image":
+                guard let alt = imageLabel(current, depth: 0) else { return false }
+                append(alt.isEmpty ? "[图片]" : "[图片：\(alt)]", styles: styles, link: nil, runs: &runs)
+            case "html_inline":
+                guard ["<br>", "<br/>", "<br />"].contains(literal(current).lowercased()) else { return false }
+                append("\n", styles: styles, link: link, runs: &runs)
+            default: return false
             }
+            node = cmark_node_next(current)
         }
-        frames.append(Frame(tag: tag, context: context))
-        if tag == "br" { append("\n", context: context) }
-        if tag == "img" {
-            let alt = attributes["alt"] ?? ""
-            context.link = nil
-            append(alt.isEmpty ? "[图片]" : "[图片：\(alt)]", context: context)
+        return true
+    }
+    private static func imageLabel(_ parent: OpaquePointer, depth: Int) -> String? {
+        guard depth < 64 else { return nil }
+        var value = "", node = cmark_node_first_child(parent)
+        while let current = node {
+            switch type(current) {
+            case "text", "code": value += literal(current)
+            case "softbreak", "linebreak": value += " "
+            case "emph", "strong", "strikethrough", "link", "image":
+                guard let child = imageLabel(current, depth: depth + 1) else { return nil }
+                value += child
+            default: return nil
+            }
+            node = cmark_node_next(current)
         }
+        return value
     }
-
-    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-        guard valid, let frame = frames.last, frame.tag == elementName.lowercased() else { reject(parser); return }
-        switch frame.tag {
-        case "th", "td":
-            guard let completed = cell, cells != nil else { reject(parser); return }
-            cells?.append(Document.Cell(runs: completed.runs, alignment: completed.alignment))
-            headers.append(completed.header); cell = nil
-        case "tr":
-            guard let completed = cells, !completed.isEmpty,
-                  rows.first.map({ $0.cells.count == completed.count }) ?? true,
-                  headers.allSatisfy({ $0 == headers.first }) else { reject(parser); return }
-            rows.append(Document.Row(cells: completed, isHeader: headers.first == true))
-            cells = nil; headers = []
-        case "table": closedTable = true
-        default: break
-        }
-        frames.removeLast()
+    private static func type(_ node: OpaquePointer) -> String { cmark_node_get_type_string(node).map(String.init(cString:)) ?? "" }
+    private static func literal(_ node: OpaquePointer) -> String { cmark_node_get_literal(node).map(String.init(cString:)) ?? "" }
+    private static func append(_ text: String, styles: Styles, link: URL?, runs: inout [Run]) {
+        guard !text.isEmpty else { return }
+        if let last = runs.last, last.styles == styles, last.link == link { runs[runs.count - 1].text += text }
+        else { runs.append(Run(text: text, styles: styles, link: link)) }
     }
-
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
-        guard valid else { return }
-        if cell != nil, let frame = frames.last, textParents.contains(frame.tag) {
-            append(string, context: frame.context)
-        } else if !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { reject(parser) }
-    }
-    func parser(_ parser: XMLParser, foundIgnorableWhitespace whitespaceString: String) { self.parser(parser, foundCharacters: whitespaceString) }
-    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
-        guard let text = String(data: CDATABlock, encoding: .utf8) else { reject(parser); return }
-        self.parser(parser, foundCharacters: text)
-    }
-    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) { valid = false }
-    func parser(_ parser: XMLParser, foundProcessingInstructionWithTarget target: String, data: String?) { reject(parser) }
-    func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? { reject(parser); return nil }
-
-    private func append(_ text: String, context: Context) {
-        guard !text.isEmpty, let cell else { return }
-        if let last = cell.runs.last, last.styles == context.styles, last.link == context.link {
-            cell.runs[cell.runs.count - 1].text += text
-        } else { cell.runs.append(Document.Run(text: text, styles: context.styles, link: context.link)) }
-    }
-    private func safeLink(_ value: String?) -> URL? {
+    private static func safeLink(_ value: String?) -> URL? {
         guard let value, let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.host?.isEmpty == false else { return nil }
         return url
     }
-    private func reject(_ parser: XMLParser) { valid = false; parser.abortParsing() }
 }

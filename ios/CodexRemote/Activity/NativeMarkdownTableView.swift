@@ -1,10 +1,9 @@
 import SwiftUI
 
 struct NativeMarkdownTableView: View {
-    let html: String
-    let fallback: String
+    let markdown: String
     var body: some View {
-        if let table = MarkdownTableDocument.parse(html: html) {
+        if let table = MarkdownTableDocument.parse(markdown: markdown) {
             ScrollView(.horizontal) {
                 Grid(alignment: .topLeading, horizontalSpacing: 0, verticalSpacing: 0) {
                     ForEach(Array(table.rows.enumerated()), id: \.offset) { index, row in
@@ -21,7 +20,7 @@ struct NativeMarkdownTableView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("表格文本").font(.caption).foregroundStyle(.secondary)
                 ScrollView(.horizontal) {
-                    Text(fallback).font(.body.monospaced()).textSelection(.enabled)
+                    Text(markdown).font(.body.monospaced()).textSelection(.enabled)
                         .fixedSize(horizontal: true, vertical: true)
                 }
             }

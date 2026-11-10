@@ -24,7 +24,7 @@ struct RichMessageView: View {
         }
         .codeBlock { config in CodeOutputView(text: config.content, language: config.language ?? "代码", title: "代码") }
         .table { config in
-            NativeMarkdownTableView(html: config.content.renderHTML(), fallback: config.content.renderMarkdown())
+            NativeMarkdownTableView(markdown: config.content.renderMarkdown())
                 .markdownMargin(top: 0, bottom: 16)
         }
     }
