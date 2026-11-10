@@ -11,11 +11,11 @@ final class RenderingUITests: XCTestCase {
         app.staticTexts["Fixture task"].tap()
         XCTAssertTrue(app.textViews["任务草稿"].waitForExistence(timeout: 5))
         let process = app.buttons["查看处理过程"]
-        for _ in 0..<12 where !process.isHittable { app.swipeDown() }
+        reveal(process, in: app, up: false)
         XCTAssertTrue(process.isHittable)
         capture(app, "conversation-\(dark ? "dark" : "light")")
         let fullCode = app.buttons["查看完整代码"]
-        for _ in 0..<8 where !fullCode.isHittable { app.swipeUp() }
+        reveal(fullCode, in: app, up: true)
         XCTAssertTrue(fullCode.isHittable)
         fullCode.tap()
         XCTAssertTrue(app.navigationBars["swift"].waitForExistence(timeout: 5))
@@ -27,6 +27,26 @@ final class RenderingUITests: XCTestCase {
         capture(app, "code-viewer-\(dark ? "dark" : "light")")
         app.buttons["完成"].tap()
         XCTAssertTrue(app.textViews["任务草稿"].exists)
+    }
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, up: Bool) {
+        for _ in 0..<14 {
+            let top = app.navigationBars.firstMatch.frame.maxY + 8
+            let bottom = app.textViews["任务草稿"].frame.minY - 8
+            if element.exists {
+                let frame = element.frame
+                if frame.minY >= top, frame.maxY <= bottom, element.isHittable { return }
+                swipeConversation(app, up: frame.minY > top)
+            } else { swipeConversation(app, up: up) }
+        }
+        XCTFail("Control did not become visible above the fixed composer")
+    }
+    private func swipeConversation(_ app: XCUIApplication, up: Bool) {
+        let top = app.navigationBars.firstMatch.frame.maxY + 20
+        let bottom = max(top + 80, app.textViews["任务草稿"].frame.minY - 20)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let upper = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: top))
+        let lower = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: bottom))
+        (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower)
     }
     private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())

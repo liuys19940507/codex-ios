@@ -44,6 +44,8 @@ final class ThreadUITests: XCTestCase {
         let heading = app.staticTexts["任务已完成"]
         XCTAssertTrue(heading.waitForExistence(timeout: 5))
         XCTAssertLessThan(heading.frame.height, 200, "Markdown should scale once at the largest text size")
+        let largeText = XCTAttachment(screenshot: app.screenshot())
+        largeText.name = "conversation-largest-text"; largeText.lifetime = .keepAlways; add(largeText)
         process.tap()
         let copy = app.buttons["复制全部输出"]
         XCTAssertTrue(copy.waitForExistence(timeout: 5))
@@ -55,6 +57,8 @@ final class ThreadUITests: XCTestCase {
         draft.tap(); draft.typeText("parent draft stays")
         XCTAssertGreaterThan(draft.frame.height, 70, "The largest text size needs a complete line and editor insets")
         if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
+        let largeDraft = XCTAttachment(screenshot: app.screenshot())
+        largeDraft.name = "composer-largest-text"; largeDraft.lifetime = .keepAlways; add(largeDraft)
         let child = app.buttons["打开子任务"]
         reveal(child, in: app, up: true)
         child.tap()

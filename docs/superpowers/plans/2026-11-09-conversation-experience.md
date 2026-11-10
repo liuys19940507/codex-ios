@@ -93,7 +93,7 @@
 
 After three failed layout fixes, the user explicitly approved an independent form. First collect the DEBUG-only button/send/receipt trace from the existing failing test. Then make the complete form own one ComposerModel and its submit action at the navigation/Form root, rather than deriving toolbar actions from a generic composer inside a Form cell. Resolve sender/model preferences synchronously at the action boundary. Keep `__new__:<projectId>` draft namespaces, accepted-only clearing, operation journal/idempotency, and the existing returned-thread navigation callback. Disable project switching/dismissal immediately during submission. ComposerView becomes conversation-only. Keep UI diagnostics until the accepted path is verified, then remove temporary instrumentation before final review.
 
-- [ ] Observe call-chain diagnosis, implement independent form and verify existing create UI test with preserved draft/receipt behavior.
+- [x] Observe call-chain diagnosis, implement independent form and verify existing create UI test with preserved draft/receipt behavior.
 - [ ] Verify largest-text Markdown scales once and process/copy/child/parent-draft controls remain reachable; inspect actual screenshots.
 
 ### T6: Verify, review and package

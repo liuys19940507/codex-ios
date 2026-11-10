@@ -129,9 +129,6 @@ private struct NewTaskFormView: View {
     @StateObject private var model: ComposerModel
     @State private var submitting = false
     @FocusState private var editing: Bool
-    #if DEBUG
-    @ObservedObject private var creationDiagnostics = CreateDiagnostics.shared
-    #endif
     init(serverID: UUID, projects: [Project], project: Project, selectedProjectID: Binding<String>, openThread: @escaping (String) -> Void) {
         self.projects = projects; self.project = project; self.openThread = openThread
         _selectedProjectID = selectedProjectID
@@ -159,11 +156,6 @@ private struct NewTaskFormView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section { OperationStatusView(openThread: openThread) }
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--ui-test-workspace") {
-                Section { Text(creationDiagnostics.message).accessibilityIdentifier("创建诊断") }
-            }
-            #endif
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(submitting || sender.busy) }
@@ -178,38 +170,16 @@ private struct NewTaskFormView: View {
         .interactiveDismissDisabled(submitting || sender.busy)
     }
     private func submit() {
-        #if DEBUG
-        CreateDiagnostics.shared.record("button enabled=\(enabled)")
-        #endif
         guard enabled else { return }
         submitting = true
         let draft = model, commandSender = sender, preference = settings.selection
         let selectedProject = project.id, onCreated = openThread
         Task {
             defer { submitting = false }
-            #if DEBUG
-            CreateDiagnostics.shared.record("send writable=\(draft.writable) length=\(draft.text.count)")
-            #endif
             let result = await draft.submitCreate(using: commandSender, projectID: selectedProject,
                                                   model: preference?.modelID, reasoning: preference?.reasoning)
-            #if DEBUG
-            CreateDiagnostics.shared.record("receipt=\(String(describing: result?.state))")
-            #endif
             if result?.state == .accepted, case .object(let data) = result?.result,
                case .string(let id) = data["threadId"], !id.isEmpty { onCreated(id) }
         }
     }
 }
-
-#if DEBUG
-@MainActor
-private final class CreateDiagnostics: ObservableObject {
-    static let shared = CreateDiagnostics()
-    @Published private(set) var message = "no action"
-    private var events: [String] = []
-    func record(_ stage: String) {
-        guard ProcessInfo.processInfo.arguments.contains("--ui-test-workspace") else { return }
-        events.append(stage); message = events.suffix(8).joined(separator: " | ")
-    }
-}
-#endif

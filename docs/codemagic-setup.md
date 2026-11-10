@@ -31,3 +31,9 @@
 本机令牌文件为 `C:\ProgramData\CodexRemote\CI\codemagic-token.txt`，目录权限限制为当前 Windows 用户、SYSTEM 和管理员。令牌只通过 `x-auth-token` 请求头发送给 Codemagic 官方 API，不写入源码、日志或 URL。没有令牌时也可在网页手动启动并下载结果。
 
 参考：[YAML 配置](https://docs.codemagic.io/yaml-basic-configuration/yaml-getting-started/)、[API 认证](https://docs.codemagic.io/rest-api/codemagic-rest-api/)、[构建接口](https://docs.codemagic.io/rest-api/builds/)。
+
+## 本机已接入状态
+
+Codemagic 应用 ID 为 `6af2b0d8392f5c83a397ccfd`，归属于个人账号。私有仓库通过 Codemagic 生成的专用 SSH 密钥连接，GitHub Deploy key 标题为 `Codemagic Codex Remote read-only`，仅允许读取 `codex-ios`。需要停用访问时，可在 GitHub 仓库 Settings → Deploy keys 中删除该条密钥。Codemagic 保存私钥，本机不转交个人 GitHub PAT。
+
+首次使用通用仓库 URL 的构建在拉取代码前失败，未运行测试。补齐 SSH 连接后，[第二次构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2b1d26e6b1c8dfae0beb1)实际运行78项测试，其中76项通过；新建任务和最大字号用例失败，流程按预期阻止打包。[第三次构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2b86a52d3f7eced4ca037)通过77项，确认字号修复及过程操作有效；新建任务仍失败。当前按已确认的独立表单方案继续验证，最终结果见[会话验证记录](validation/conversation-experience.md)。
