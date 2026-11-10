@@ -6,7 +6,7 @@ struct ConversationView: View {
     let serverID: UUID
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var sender: CommandSender
-    @EnvironmentObject private var connection: ConnectionModel
+    @EnvironmentObject private var lifecycle: LifecycleController
     @StateObject private var composer: ComposerModel
     @State private var title = "会话"
     init(threadID: String, serverID: UUID, drafts: DraftStore = DraftStore()) {
@@ -34,23 +34,23 @@ struct ConversationView: View {
                         }
                         if let parent = snapshot.thread.parentId { NavigationLink("返回父任务", value: parent) }
                         ForEach(snapshot.pending) { request in
-                            ApprovalView(request: request, snapshot: snapshot, features: connection.info?.features ?? [:])
+                            ApprovalView(request: request, snapshot: snapshot, features: lifecycle.info?.features ?? [:])
                         }
                     } else if session.connectionState == .syncing || session.connectionState == .connecting { ProgressView("正在同步会话…") }
                     if let message = session.message {
                         VStack(alignment: .leading, spacing: 8) {
                             Label(message, systemImage: "exclamationmark.circle")
-                            Button("重新同步") { Task { await session.selectThread(threadID) } }
+                            Button("重新同步") { Task { await lifecycle.setActive(true); if lifecycle.ready { await session.selectThread(threadID) } } }
                         }
                     }
-                    ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: connection.info?.features ?? [:])
+                    ComposerView(model: composer, snapshot: session.snapshot?.thread.id == threadID ? session.snapshot : nil, features: lifecycle.info?.features ?? [:])
                     OperationStatusView()
                     Color.clear.frame(height: 1).id("conversation-end")
                 }.padding()
             }.scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    if connection.info?.features["interrupt"] == true, let current = session.snapshot, current.thread.id == threadID, let turn = current.thread.activeTurnId {
+                    if lifecycle.info?.features["interrupt"] == true, let current = session.snapshot, current.thread.id == threadID, let turn = current.thread.activeTurnId {
                         Button(role: .destructive) {
                             Task { _ = await sender.submit(method: .interrupt, params: ["threadId": .string(threadID), "turnId": .string(turn)]) }
                         } label: { Image(systemName: "stop.circle") }

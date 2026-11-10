@@ -10,4 +10,7 @@ protocol BridgeTransport: Sendable {
     func command(_ command: Command) async throws -> Operation
     func events(after: Cursor?) -> AsyncThrowingStream<EventFrame, Error>
     func close() async
+    func cancelEvents() async
 }
+
+extension BridgeTransport { func cancelEvents() async { } }

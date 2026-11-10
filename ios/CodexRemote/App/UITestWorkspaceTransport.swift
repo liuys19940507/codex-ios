@@ -11,6 +11,8 @@ actor UITestWorkspaceTransport: BridgeTransport {
     func get<T: Decodable & Sendable>(_ path: String, as: T.Type) async throws -> T {
         let components = URLComponents(string: "https://fixture.invalid" + path)!
         switch components.path {
+        case "/v1/info":
+            return ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "approvals": true]) as! T
         case "/v1/projects":
             return [Project(id: "fixture-project", name: "Fixture Project", path: "C:/fixture")] as! T
         case "/v1/models":

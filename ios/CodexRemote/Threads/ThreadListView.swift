@@ -17,19 +17,19 @@ private struct WorkspaceView: View {
     @StateObject private var session: SessionStore
     @StateObject private var threads: ThreadListModel
     @StateObject private var sender: CommandSender
+    @StateObject private var lifecycle: LifecycleController
+    @StateObject private var settings: ModelSettings
+    @Environment(\.scenePhase) private var phase
     @State private var path: [String] = []
     init(server: ServerConfiguration, transport: any BridgeTransport) {
         self.server = server; self.transport = transport
         let session = SessionStore()
+        let lifecycle = LifecycleController(session: session, server: server, transport: transport)
         _session = StateObject(wrappedValue: session)
+        _lifecycle = StateObject(wrappedValue: lifecycle)
+        _settings = StateObject(wrappedValue: ModelSettings(serverID: server.id, transport: transport))
         _threads = StateObject(wrappedValue: ThreadListModel(transport: transport))
-        _sender = StateObject(wrappedValue: CommandSender(serverID: server.id, transport: transport, canSend: { [weak session] method in
-            guard let session, session.currentServerID == server.id, session.transport != nil else { return false }
-            switch method {
-            case .create, .rename, .archive: return session.connectionState != .failed && session.connectionState != .disconnected
-            default: return session.connectionState == .connected
-            }
-        }))
+        _sender = StateObject(wrappedValue: CommandSender(serverID: server.id, transport: transport, canSend: { [weak lifecycle] in lifecycle?.canWrite($0) == true }))
     }
     var body: some View {
         TabView {
@@ -37,11 +37,19 @@ private struct WorkspaceView: View {
                 .tabItem { Label("任务", systemImage: "list.bullet.rectangle") }
             NavigationStack { ConnectionView() }
                 .tabItem { Label("连接", systemImage: "network") }
+            NavigationStack { SettingsView() }.tabItem { Label("设置", systemImage: "gearshape") }
         }
         .environmentObject(session)
         .environmentObject(sender)
-        .task { await session.connect(server: server, transport: transport) }
-        .onDisappear { Task { await session.disconnect() } }
+        .environmentObject(lifecycle)
+        .environmentObject(settings)
+        .task {
+            await session.connect(server: server, transport: transport)
+            await lifecycle.setActive(phase == .active)
+            await settings.load()
+        }
+        .onChange(of: phase) { value in Task { await lifecycle.setActive(value == .active) } }
+        .onDisappear { Task { await lifecycle.setActive(false); await session.disconnect() } }
     }
 }
 
@@ -50,6 +58,8 @@ struct ThreadListView: View {
     @ObservedObject var model: ThreadListModel
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var sender: CommandSender
+    @EnvironmentObject private var lifecycle: LifecycleController
+    @EnvironmentObject private var settings: ModelSettings
     @Environment(\.dynamicTypeSize) private var typeSize
     let serverID: UUID
     let openThread: (String) -> Void
@@ -62,6 +72,12 @@ struct ThreadListView: View {
     private struct Search: Hashable { let project: String?; let query: String }
     var body: some View {
         List {
+            if !lifecycle.ready {
+                Section {
+                    Text(lifecycle.message ?? "正在校验服务并同步状态…").font(.footnote)
+                    Button("重新同步连接") { Task { await lifecycle.setActive(true) } }
+                }
+            }
             if !model.projects.isEmpty {
                 Section {
                     Picker("项目", selection: $projectID) {
@@ -107,7 +123,7 @@ struct ThreadListView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { creating = true } label: { Label("新任务", systemImage: "plus") }
-                    .disabled(model.projects.isEmpty || !sender.canSubmit(.create))
+                    .disabled(model.projects.isEmpty || !sender.canSubmit(.create) || !settings.canCreate)
             }
         }
         .searchable(text: $query, prompt: "搜索任务")
@@ -125,7 +141,7 @@ struct ThreadListView: View {
                     creating = false; openThread(id)
                     Task { await model.reload(projectID: projectID, query: query) }
                 }
-            }.environmentObject(sender).environmentObject(session)
+            }.environmentObject(sender).environmentObject(session).environmentObject(settings).environmentObject(lifecycle)
         }
         .alert("重命名", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("会话名称", text: $renameTitle)

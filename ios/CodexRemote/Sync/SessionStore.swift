@@ -165,6 +165,23 @@ final class SessionStore: ObservableObject {
         }
     }
 
+    func suspend() async {
+        generation = UUID(); selection = UUID(); streamID = UUID()
+        stream?.cancel(); stream = nil
+        loading = false; buffered = []; overflow = false
+        historyLoading = false; historyMessage = nil
+        connectionState = .disconnected
+        message = "实时连接已暂停，恢复后会重新同步。"
+        await transport?.cancelEvents()
+    }
+
+    func resumeForeground() async -> Bool {
+        guard transport != nil, currentServerID != nil else { return false }
+        if let id = selectedThread { await selectThread(id); return connectionState == .connected }
+        connectionState = .syncing; message = nil
+        return true
+    }
+
     func disconnect() async {
         generation = UUID(); selection = UUID(); streamID = UUID()
         stream?.cancel(); stream = nil

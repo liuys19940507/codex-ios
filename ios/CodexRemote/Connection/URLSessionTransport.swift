@@ -102,9 +102,13 @@ actor URLSessionTransport: BridgeTransport {
         activeSocket?.cancel(with: .goingAway, reason: nil)
     }
 
-    func close() async {
+    func cancelEvents() async {
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
+    }
+
+    func close() async {
+        await cancelEvents()
         session.invalidateAndCancel()
     }
 }

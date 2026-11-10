@@ -5,6 +5,8 @@ struct ComposerView: View {
     @ObservedObject var model: ComposerModel
     @EnvironmentObject private var sender: CommandSender
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var settings: ModelSettings
+    @EnvironmentObject private var lifecycle: LifecycleController
     var snapshot: Snapshot? = nil
     var features: [String: Bool] = [:]
     var projectID: String? = nil
@@ -22,9 +24,9 @@ struct ComposerView: View {
         return ["threadId": .string(snapshot?.thread.id ?? "")]
     }
     private var enabled: Bool {
-        guard model.writable, !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        guard lifecycle.active, lifecycle.ready, model.writable, !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !sender.busy, sender.canSubmit(method), sender.blocked(method: method, params: target) == nil else { return false }
-        if projectID != nil { return true }
+        if projectID != nil { return settings.canCreate }
         guard snapshot != nil else { return false }
         return !running || (chosenMode == .steer ? features["steer"] == true : features["queue"] == true)
     }
@@ -46,7 +48,8 @@ struct ComposerView: View {
             Button {
                 Task {
                     if let projectID {
-                        let result = await model.submitCreate(using: sender, projectID: projectID)
+                        guard settings.canCreate else { return }
+                        let result = await model.submitCreate(using: sender, projectID: projectID, model: settings.selection?.modelID, reasoning: settings.selection?.reasoning)
                         if result?.state == .accepted, case .object(let data) = result?.result,
                            case .string(let id) = data["threadId"] { onCreated?(id) }
                     } else if let snapshot {
@@ -75,6 +78,7 @@ struct NewTaskView: View {
     let serverID: UUID
     let openThread: (String) -> Void
     @EnvironmentObject private var sender: CommandSender
+    @EnvironmentObject private var settings: ModelSettings
     @Environment(\.dismiss) private var dismiss
     @State private var projectID: String
     init(projects: [Project], serverID: UUID, selectedProjectID: String?, openThread: @escaping (String) -> Void) {
@@ -85,7 +89,8 @@ struct NewTaskView: View {
         Form {
             Section {
                 Picker("项目", selection: $projectID) { ForEach(projects) { Text($0.name).tag($0.id) } }
-                Text("使用 Windows 当前配置的默认模型。").font(.footnote).foregroundStyle(.secondary)
+                if let id = settings.selection?.modelID { Text("模型：\(id) · \(settings.selection?.reasoning ?? "默认推理强度")").font(.footnote).foregroundStyle(.secondary) }
+                else { Text("沿用 Windows 当前默认配置。").font(.footnote).foregroundStyle(.secondary) }
             }
             if let project = projects.first(where: { $0.id == projectID }) {
                 Section { NewTaskDraftView(serverID: serverID, project: project, openThread: openThread).id(project.id) }
