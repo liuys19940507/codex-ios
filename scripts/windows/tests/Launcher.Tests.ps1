@@ -3,6 +3,25 @@
 }
 
 Describe 'PowerShell launcher' {
+    It 'uses the actual current directory when history project discovery is enabled' {
+        $directory = Join-Path $TestDrive 'another project'
+        New-Item -ItemType Directory -Path $directory | Out-Null
+        Push-Location -LiteralPath $directory
+        try {
+            $config = [pscustomobject]@{discoverProjects=$true;projects=@([pscustomobject]@{id='known';path=$TestDrive})}
+            Resolve-CodexRemoteProjectDirectory -Config $config | Should -BeExactly $directory
+        } finally { Pop-Location }
+    }
+    It 'preserves an explicitly selected project and rejects unknown IDs' {
+        $config = [pscustomobject]@{projects=@([pscustomobject]@{id='known';path=$TestDrive})}
+        Resolve-CodexRemoteProjectDirectory -Config $config -ProjectId 'known' | Should -BeExactly $TestDrive
+        { Resolve-CodexRemoteProjectDirectory -Config $config -ProjectId 'unknown' } | Should -Throw
+    }
+    It 'keeps static project scope and rejects conflicting selection arguments' {
+        $config = [pscustomobject]@{projects=@([pscustomobject]@{id='known';path=(Join-Path $TestDrive 'known')})}
+        { Resolve-CodexRemoteProjectDirectory -Config $config -ProjectPath $TestDrive } | Should -Throw
+        { Resolve-CodexRemoteProjectDirectory -Config $config -ProjectId 'known' -ProjectPath $TestDrive } | Should -Throw
+    }
     It 'preserves Unicode, spaces and shell metacharacters as arguments' {
         $actual = @(Get-CodexRemoteArguments -RemoteUrl 'ws://127.0.0.1:8390' -ProjectPath 'D:\项目 空格\a;&$b' -Prompt '检查 ; & $x 中文' -CliArguments @('--model', 'gpt-6.1-sol'))
         $expected = @('--remote', 'ws://127.0.0.1:8390', '--remote-auth-token-env', 'CODEX_REMOTE_LOCAL_TOKEN', '-C', 'D:\项目 空格\a;&$b', '--model', 'gpt-6.1-sol', '--', '检查 ; & $x 中文')

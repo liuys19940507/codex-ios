@@ -1,5 +1,28 @@
 ﻿Set-StrictMode -Version Latest
 
+function Resolve-CodexRemoteProjectDirectory {
+    param([Parameter(Mandatory=$true)]$Config, [string]$ProjectId, [string]$ProjectPath)
+    if ($ProjectId -and $ProjectPath) { throw 'Choose either ProjectId or ProjectPath' }
+    if ($ProjectId) {
+        $project = @($Config.projects | Where-Object id -EQ $ProjectId)
+        if ($project.Count -ne 1) { throw 'Unknown or duplicate configured project ID' }
+        $ProjectPath = $project[0].path
+    }
+    if (-not $ProjectPath) { $ProjectPath = (Get-Location).ProviderPath }
+    $directory = (Get-Item -LiteralPath $ProjectPath -ErrorAction Stop)
+    if (-not $directory.PSIsContainer -or $directory.PSProvider.Name -ne 'FileSystem') { throw 'Select an existing local project directory' }
+    $resolved = $directory.FullName
+    $discovery = $Config.PSObject.Properties['discoverProjects'] -and $Config.discoverProjects -eq $true
+    if (-not $discovery) {
+        $inside = @($Config.projects | Where-Object {
+            $root = [IO.Path]::GetFullPath($_.path).TrimEnd('\','/')
+            $resolved.Equals($root, [StringComparison]::OrdinalIgnoreCase) -or $resolved.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)
+        })
+        if ($inside.Count -eq 0) { throw 'Project directory is outside configured project roots' }
+    }
+    return $resolved
+}
+
 function Get-CodexRemoteArguments {
     param([string]$RemoteUrl, [string]$ProjectPath, [string]$Prompt, [string[]]$CliArguments = @())
     $result = @('--remote', $RemoteUrl, '--remote-auth-token-env', 'CODEX_REMOTE_LOCAL_TOKEN', '-C', $ProjectPath) + $CliArguments
@@ -27,4 +50,4 @@ function Invoke-CodexRemoteClient {
         [IO.Directory]::Delete($privateDir)
     }
 }
-Export-ModuleMember -Function Get-CodexRemoteArguments,Invoke-CodexRemoteClient
+Export-ModuleMember -Function Get-CodexRemoteArguments,Invoke-CodexRemoteClient,Resolve-CodexRemoteProjectDirectory
