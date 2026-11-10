@@ -16,6 +16,19 @@ import { fakeServer, handshake } from './support/fake-server.js';
 import type { Command } from '../src/api/contracts.js';
 
 const command=(method:Command['method'],params:Command['params']):Command=>({id:randomUUID(),method,params});
+
+test('attachment_commands_are_scoped_idempotent_and_do_not_interrupt_work',async t=>{
+  const f=await fixture(t);const attachmentId=randomUUID();
+  const attach=command('thread/attach',{threadId:'thread',attachmentId});
+  assert.equal((await f.commands.dispatch(attach)).state,'accepted');
+  const count=f.calls.filter(c=>c.method==='thread/resume').length;
+  assert.equal((await f.commands.dispatch(attach)).state,'accepted');
+  assert.equal(f.calls.filter(c=>c.method==='thread/resume').length,count);
+  assert.equal((await f.commands.dispatch(command('thread/release',{threadId:'thread',attachmentId}))).state,'accepted');
+  assert.equal(f.calls.filter(c=>c.method==='thread/unsubscribe').length,1);
+  assert.equal(f.calls.some(c=>['turn/interrupt','thread/archive'].includes(c.method)),false);
+  await assert.rejects(f.commands.dispatch(command('thread/attach',{threadId:'thread',attachmentId:'invalid'})),/UUID/);
+});
 async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolean;streamStart?:boolean}={}) {
   const dir=await mkdtemp(join(tmpdir(),'codex-command-')),projects=[{id:'project',name:'Controlled',path:'C:/controlled/project'}];
   const active=options.active??true;

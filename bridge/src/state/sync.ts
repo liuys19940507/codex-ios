@@ -4,6 +4,7 @@ import { ApiError } from '../api/validation.js';
 import type { RpcClient } from '../protocol/rpc-client.js';
 import type { Store } from './store.js';
 import { object, projectItem, summary } from './reducer.js';
+import { RpcError } from '../protocol/rpc-client.js';
 
 export type SourceEvent={connectionId:string;ordinal:number;message:Json};
 export class SyncService {
@@ -12,12 +13,16 @@ export class SyncService {
   private readonly ready=new Set<string>();
   private readonly inflight=new Map<string,Promise<Snapshot>>();
   private readonly buffers=new Map<string,SourceEvent[]>();
+  private readonly attachments=new Map<string,string>();
+  private readonly attachmentWork=new Map<string,Promise<unknown>>();
+  private readonly readOnly=new Map<string,string>();
   private readonly listeners=new Set<(event:Envelope)=>void>();
   private readonly unsubscribe:()=>void;
   constructor(private readonly store:Store,private readonly rpc:RpcClient) {
     this.unsubscribe=rpc.onEvent(message=>{
       const p=object(object(message).params),threadId=String(p.threadId??object(p.thread).id??'');
       if(!threadId)return;
+      if(object(message).method==='thread/closed')this.ready.delete(threadId);
       const frame={connectionId:this.connectionId,ordinal:++this.ordinal,message};
       const buffer=this.buffers.get(threadId);
       if(buffer) {
@@ -63,8 +68,44 @@ export class SyncService {
   snapshot(threadId:string):Promise<Snapshot> {
     return this.prepare(threadId,false);
   }
-  resumeForWrite(threadId:string):Promise<Snapshot> {
-    return this.prepare(threadId,true);
+  async resumeForWrite(threadId:string):Promise<Snapshot> {
+    try {return await this.prepare(threadId,true);}
+    catch(error) {
+      if(error instanceof RpcError&&/^thread .+ already has an active writer$/.test(error.message)) {
+        const reason='电脑上的独立 CLI 正在控制此会话。请先退出电脑端该会话，再在手机点刷新重新取得控制。';
+        this.ready.delete(threadId);this.readOnly.set(threadId,reason);
+        throw new ApiError(409,'thread_busy',reason);
+      }
+      throw error;
+    }
+  }
+  private attachmentTask<T>(threadId:string,work:()=>Promise<T>):Promise<T> {
+    const previous=this.attachmentWork.get(threadId)??Promise.resolve();
+    const next=previous.catch(()=>{}).then(work);
+    this.attachmentWork.set(threadId,next);
+    void next.finally(()=>{if(this.attachmentWork.get(threadId)===next)this.attachmentWork.delete(threadId);}).catch(()=>{});
+    return next;
+  }
+  attach(threadId:string,attachmentId:string):Promise<Snapshot> {
+    return this.attachmentTask(threadId,async()=>{
+      this.attachments.set(threadId,attachmentId);
+      try {return await this.resumeForWrite(threadId);}
+      catch(error) {
+        if(!(error instanceof ApiError)||error.code!=='thread_busy')throw error;
+        return this.prepare(threadId,false);
+      }
+    });
+  }
+  release(threadId:string,attachmentId:string):Promise<Json> {
+    return this.attachmentTask(threadId,async()=>{
+      if(this.attachments.get(threadId)!==attachmentId)return {status:'notSubscribed'};
+      await this.inflight.get(threadId)?.catch(()=>{});
+      try {
+        const result=await this.rpc.request('thread/unsubscribe',{threadId});
+        this.attachments.delete(threadId);this.readOnly.delete(threadId);
+        return result;
+      } finally {this.ready.delete(threadId);}
+    });
   }
   private prepare(threadId:string,forWrite:boolean):Promise<Snapshot> {
     if(!forWrite&&this.ready.has(threadId))return Promise.resolve(this.store.snapshot(threadId));
@@ -85,7 +126,7 @@ export class SyncService {
       this.buffers.delete(threadId);
       // A read-only history snapshot has no upstream subscription. Recheck
       // loaded state on its next read so a CLI-resumed task can be attached.
-      if(isLoaded)this.ready.add(threadId);
+      if(isLoaded){this.ready.add(threadId);this.readOnly.delete(threadId);delete snap.readOnlyReason;this.store.atomic(()=>this.store.putSnapshot(snap));}
       for(const frame of buffered) {
         const msg=object(frame.message),p=object(msg.params),id=String(p.itemId??object(p.item).id??'');
         // Canonical snapshot items already include pre-barrier changes. In the
@@ -94,7 +135,7 @@ export class SyncService {
         else this.store.atomic(()=>this.store.markSource(frame.connectionId,frame.ordinal));
       }
     };
-    if(isLoaded)await this.rpc.requestAtBarrier('thread/resume',{threadId,excludeTurns:true,initialTurnsPage:{limit:20,sortDirection:'desc',itemsView:'full'}},apply);
+    if(isLoaded)await this.rpc.requestAtBarrier('thread/resume',{threadId,excludeTurns:true,...(forWrite?{config:{thread_unload_delay_secs:0}}:{}),initialTurnsPage:{limit:20,sortDirection:'desc',itemsView:'full'}},apply);
     else apply(await this.rpc.request('thread/read',{threadId,includeTurns:true}));
     return this.store.snapshot(threadId);
   }
@@ -109,6 +150,7 @@ export class SyncService {
       items.push(projectItem(raw,String(turn.id),completed));
     }
     const snapshot:Snapshot={cursor:this.store.cursor(),thread:threadSummary,items,itemsCursor:response.itemsBackwardsCursor??null,pending:[],
+      ...(this.readOnly.has(threadSummary.id)?{readOnlyReason:this.readOnly.get(threadSummary.id)!}:{}),
       policy:{approvalPolicy:typeof response.approvalPolicy==='string'?response.approvalPolicy:null,
         sandbox:typeof object(response.sandbox).type==='string'?response.sandbox.type:null}};
     this.store.atomic(()=>this.store.putSnapshot(snapshot));return snapshot;

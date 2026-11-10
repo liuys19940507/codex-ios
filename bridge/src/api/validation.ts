@@ -17,6 +17,8 @@ const fields:Record<Command['method'],string[]>={
   'request/respond':['requestId','threadId','turnId','response'],
   'thread/rename':['threadId','title'],
   'thread/archive':['threadId'],
+  'thread/attach':['threadId','attachmentId'],
+  'thread/release':['threadId','attachmentId'],
 };
 function invalid(message:string):never { throw new ApiError(400,'invalid_request',message); }
 function record(value:unknown):RecordValue {
@@ -41,6 +43,9 @@ export function validateCommand(value:unknown):Command {
     if(p.reasoning!==undefined) string(p.reasoning,'reasoning',64);
   } else {
     string(p.threadId,'threadId');
+    if(method==='thread/attach'||method==='thread/release') {
+      if(typeof p.attachmentId!=='string'||!uuid.test(p.attachmentId))invalid('Attachment id must be a UUID');
+    }
     if(method==='task/input') {
       string(p.text,'text',65536);
       if(!['start','steer','queue'].includes(String(p.mode))) invalid('Unsupported input mode');

@@ -24,6 +24,13 @@ export function createCommands(context:Context) {
   async function dispatch(raw:Command):Promise<Operation> {
     const command=validateCommand(raw),p=command.params;
     const existing=operations.lookup(command);if(existing)return existing;
+    if(command.method==='thread/attach'||command.method==='thread/release') {
+      const threadId=String(p.threadId),attachmentId=String(p.attachmentId);
+      await queries.authorizeThread(threadId);
+      return operations.executeOnce(command,async()=>command.method==='thread/attach'
+        ?{readOnlyReason:(await sync.attach(threadId,attachmentId)).readOnlyReason??null}
+        :sync.release(threadId,attachmentId));
+    }
     let snapshot:Snapshot|undefined;
     if(command.method==='task/create') {
       requireProject(projects,String(p.projectId));
@@ -34,6 +41,7 @@ export function createCommands(context:Context) {
       }
     } else {
       snapshot=await queries.querySnapshot(String(p.threadId));
+      if(snapshot.readOnlyReason)throw new ApiError(409,'thread_busy',snapshot.readOnlyReason);
       if(command.method==='task/input') {
         if(p.mode==='queue')capability('queue');
         if(p.mode==='steer'){capability('steer');if(snapshot.thread.activeTurnId!==p.expectedTurnId)conflict('The active turn changed; refresh before steering');}

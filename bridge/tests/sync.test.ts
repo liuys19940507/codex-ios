@@ -37,6 +37,7 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
   const file=options.memory?':memory:':join(dir,'state.sqlite');
   const calls:string[]=[];
   let loaded=!options.unloaded;
+  let externalWriter=false,historyText='history';
   const resumeParams:unknown[]=[];
   server=await fakeServer((socket,m)=>{
     if(handshake(socket,m))return;
@@ -46,13 +47,15 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
     }
     calls.push(m.method!);
     if(m.method==='thread/loaded/list')socket.send(JSON.stringify({id:m.id,result:{data:loaded?['thread']:[]}}));
-    else if(m.method==='thread/read')socket.send(JSON.stringify({id:m.id,result:{thread:{...resume.thread,status:{type:'notLoaded'},turns:[{id:'old',status:'completed',items:[{id:'history',type:'agentMessage',text:'history'}]}]}}}));
+    else if(m.method==='thread/read')socket.send(JSON.stringify({id:m.id,result:{thread:{...resume.thread,status:{type:'notLoaded'},turns:[{id:'old',status:'completed',items:[{id:'history',type:'agentMessage',text:historyText}]}]}}}));
     else if(m.method==='thread/resume') {
       resumeParams.push(m.params);
+      if(externalWriter){socket.send(JSON.stringify({id:m.id,error:{code:-32603,message:'thread thread already has an active writer'}}));return;}
       if(options.race)socket.send(JSON.stringify(delta('pre')));
       socket.send(JSON.stringify({id:m.id,result:resume}));
       if(options.race)socket.send(JSON.stringify(delta('ha')));
-    } else socket.send(JSON.stringify({id:m.id,error:{code:-32601,message:'Unexpected method'}}));
+    } else if(m.method==='thread/unsubscribe')socket.send(JSON.stringify({id:m.id,result:{status:'unsubscribed'}}));
+    else socket.send(JSON.stringify({id:m.id,error:{code:-32601,message:'Unexpected method'}}));
   });
   rpc=await connectRpc(server.url,'test');
   const store=openStore(file);stores.push(store);
@@ -62,8 +65,44 @@ async function fixture(t:TestContext,options:{race?:boolean;unloaded?:boolean;me
   await sync.snapshot('thread');
   const apply=(ordinal:number,message:Json)=>activeSync.applyEvent({connectionId:'fixture',ordinal,message});
   const item=()=>store.snapshot('thread').items.find(i=>i.id==='message')!;
-  return {file,store,sync:activeSync,apply,item,calls,stores,resumeParams,setLoaded:()=>{loaded=true;}};
+  return {file,store,sync:activeSync,apply,item,calls,stores,resumeParams,setLoaded:()=>{loaded=true;},setExternal:(value:boolean)=>{externalWriter=value;},setHistory:(value:string)=>{historyText=value;}};
 }
+
+test('attachment_refresh_rehydrates_and_only_current_attachment_can_release',async t=>{
+  const f=await fixture(t);
+  await f.sync.attach('thread','00000000-0000-4000-8000-000000000001');
+  await f.sync.attach('thread','00000000-0000-4000-8000-000000000002');
+  assert.equal(f.calls.filter(m=>m==='thread/resume').length,3);
+  await f.sync.release('thread','00000000-0000-4000-8000-000000000001');
+  assert.equal(f.calls.includes('thread/unsubscribe'),false);
+  await f.sync.release('thread','00000000-0000-4000-8000-000000000002');
+  assert.equal(f.calls.filter(m=>m==='thread/unsubscribe').length,1);
+  await f.sync.snapshot('thread');
+  assert.equal(f.calls.filter(m=>m==='thread/resume').length,4);
+  assert.equal(f.calls.some(m=>/interrupt|archive|shutdown/.test(m)),false);
+});
+
+test('external_writer_keeps_read_only_history_and_refresh_recovers_after_desktop_leaves',async t=>{
+  const f=await fixture(t,{unloaded:true});f.setExternal(true);f.setHistory('desktop latest 中文😀');
+  const attached=await f.sync.attach('thread','00000000-0000-4000-8000-000000000001');
+  assert.equal(attached.items[0]?.text,'desktop latest 中文😀');
+  assert.match(attached.readOnlyReason??'',/电脑|CLI/);
+  await assert.rejects(f.sync.resumeForWrite('thread'),/电脑|CLI/);
+  f.setExternal(false);
+  const refreshed=await f.sync.attach('thread','00000000-0000-4000-8000-000000000001');
+  assert.equal(refreshed.readOnlyReason,undefined);
+  const params=f.resumeParams.at(-1) as any;
+  assert.equal(params.config.thread_unload_delay_secs,0);
+});
+
+test('release_waits_for_an_inflight_snapshot_before_unsubscribing',async t=>{
+  const f=await fixture(t);
+  const attachment='00000000-0000-4000-8000-000000000001';
+  const attaching=f.sync.attach('thread',attachment);
+  const leaving=f.sync.release('thread',attachment);
+  await Promise.all([attaching,leaving]);
+  assert.equal(f.calls.at(-1),'thread/unsubscribe');
+});
 
 test('announced_thread_still_attaches_before_treating_cached_state_as_live',async t=>{
   const f=await fixture(t,{announce:true});

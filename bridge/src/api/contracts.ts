@@ -12,6 +12,7 @@ export type ThreadSummary = {
 };
 export type Snapshot = {
   cursor: Cursor; thread: ThreadSummary; items: Item[]; itemsCursor: string | null;
+  readOnlyReason?: string;
   pending: Pending[]; policy: { approvalPolicy: string | null; sandbox: string | null };
 };
 export type Envelope = { cursor: Cursor; threadId: string; type: string; data: Json };
@@ -21,6 +22,6 @@ export type Operation = {
 };
 export type Command = {
   id: string;
-  method: 'task/create' | 'task/input' | 'task/interrupt' | 'request/respond' | 'thread/rename' | 'thread/archive';
+  method: 'task/create' | 'task/input' | 'task/interrupt' | 'request/respond' | 'thread/rename' | 'thread/archive' | 'thread/attach' | 'thread/release';
   params: { [key: string]: Json };
 };
