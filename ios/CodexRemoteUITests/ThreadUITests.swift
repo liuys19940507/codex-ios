@@ -10,8 +10,12 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
         XCTAssertTrue(draft.isHittable)
+        let process = app.buttons["查看处理过程"]
+        reveal(process, in: app, up: false)
+        let anchor = process.frame.minY
         let position = draft.frame.minY
-        app.swipeUp()
+        swipeConversation(app, up: true)
+        XCTAssertTrue(!process.exists || abs(process.frame.minY - anchor) > 2)
         XCTAssertEqual(draft.frame.minY, position, accuracy: 2)
     }
     func testConversationHasRefreshAndRetainsDraftAfterRefresh() {
@@ -35,25 +39,26 @@ final class ThreadUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
         app.staticTexts["Fixture task"].tap()
         let process = app.buttons["查看处理过程"]
-        for _ in 0..<12 where !process.isHittable { app.swipeDown() }
+        reveal(process, in: app, up: false)
         XCTAssertTrue(process.exists)
         process.tap()
         let copy = app.buttons["复制全部输出"]
         XCTAssertTrue(copy.waitForExistence(timeout: 5))
-        for _ in 0..<5 where !copy.isHittable { app.swipeUp() }
+        reveal(copy, in: app, up: true)
         copy.tap()
         XCTAssertTrue(app.staticTexts["已复制"].waitForExistence(timeout: 5))
         let draft = app.textViews["任务草稿"]
-        for _ in 0..<8 where !draft.isHittable { app.swipeUp() }
+        XCTAssertTrue(draft.isHittable)
         draft.tap(); draft.typeText("parent draft stays")
+        XCTAssertGreaterThan(draft.frame.height, 80, "The largest text size needs a complete line and editor insets")
         if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
         let child = app.buttons["打开子任务"]
-        for _ in 0..<10 where !child.isHittable { app.swipeUp() }
+        reveal(child, in: app, up: true)
         child.tap()
         XCTAssertTrue(app.navigationBars["Child fixture task"].waitForExistence(timeout: 10))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.navigationBars["Fixture task"].waitForExistence(timeout: 10))
-        for _ in 0..<8 where !draft.isHittable { app.swipeUp() }
+        XCTAssertTrue(draft.isHittable)
         XCTAssertEqual(draft.value as? String, "parent draft stays")
     }
     func testCreateTaskFromConfiguredProjectOpensTheReturnedThread() {
@@ -67,6 +72,10 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
         draft.tap(); draft.typeText("controlled create")
+        let submit = app.buttons["创建并发送"]
+        let before = XCTAttachment(string: "enabled=\(submit.isEnabled), hittable=\(submit.isHittable)\n" + app.debugDescription)
+        before.name = "create-before-tap"; before.lifetime = .keepAlways; add(before)
+        XCTAssertTrue(submit.isEnabled)
         app.buttons["创建并发送"].tap()
         let opened = app.navigationBars["Created fixture task"].waitForExistence(timeout: 10)
         if !opened {
@@ -74,6 +83,27 @@ final class ThreadUITests: XCTestCase {
             state.name = "create-task-navigation-state"; state.lifetime = .keepAlways; add(state)
         }
         XCTAssertTrue(opened)
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, up: Bool) {
+        for _ in 0..<14 {
+            let top = app.navigationBars.firstMatch.frame.maxY + 8
+            let bottom = app.textViews["任务草稿"].frame.minY - 8
+            if element.exists {
+                let frame = element.frame
+                if frame.minY >= top, frame.maxY <= bottom, element.isHittable { return }
+                swipeConversation(app, up: frame.minY > top)
+            } else { swipeConversation(app, up: up) }
+        }
+        XCTFail("Control did not become visible above the fixed composer")
+    }
+    private func swipeConversation(_ app: XCUIApplication, up: Bool) {
+        let top = app.navigationBars.firstMatch.frame.maxY + 20
+        let bottom = max(top + 80, app.textViews["任务草稿"].frame.minY - 20)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let upper = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: top))
+        let lower = origin.withOffset(CGVector(dx: app.frame.width / 2, dy: bottom))
+        (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower)
     }
 
     func testRenameAndArchiveFromThreadMenu() {
