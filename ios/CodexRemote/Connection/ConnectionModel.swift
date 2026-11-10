@@ -103,7 +103,8 @@ final class ConnectionModel: ObservableObject {
 
     #if DEBUG
     static func uiTestWorkspace() -> ConnectionModel {
-        let server = try! ServerConfiguration(name: "Fixture Windows", address: "https://fixture.invalid")
+        let fixtureID = ProcessInfo.processInfo.arguments.contains("--ui-test-pins") ? UUID(uuidString: "00000000-0000-4000-8000-000000000051")! : UUID()
+        let server = try! ServerConfiguration(id: fixtureID, name: "Fixture Windows", address: "https://fixture.invalid")
         let store = ServerStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("CodexRemoteUITest/workspace.json"))
         try? store.save([server])
         let credentials = CredentialStore(backend: UITestKeychain())

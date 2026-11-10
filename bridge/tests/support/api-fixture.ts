@@ -9,7 +9,7 @@ export async function apiFixture(t:TestContext) {
   const api=createApiServer({token,info:{apiVersion:1,serverId:'fixture',codexVersion:'0.167.0',features:{queue:false}},
     available:()=>available,log:message=>logs.push(message),
     queries:{queryProjects:()=>[{id:'project',name:'Controlled',path:'C:/controlled'}],queryModels:async()=>[],
-      queryThreads:async()=>({data:[],nextCursor:null}),querySnapshot:async()=>{throw new ApiError(404,'not_found','Not observed');},queryItems:async()=>({data:[],nextCursor:null})},
+      queryThreads:async()=>({data:[],nextCursor:null}),queryMetadata:async()=>{throw new ApiError(404,'not_found','Not observed');},querySnapshot:async()=>{throw new ApiError(404,'not_found','Not observed');},queryItems:async()=>({data:[],nextCursor:null})},
     commands:{dispatch:async command=>{commands.push(command);return {id:command.id,state:'accepted',result:null,message:null};}},
     operations:{getOperation:id=>({id,state:'unknown',result:null,message:null})},
     sync:{replay:(cursor:Cursor)=>cursor.epoch==='epoch'&&cursor.seq<=events.length?events.filter(e=>e.cursor.seq>cursor.seq):'resync_required',onEvent:handler=>{handlers.add(handler);return()=>{handlers.delete(handler);};}}

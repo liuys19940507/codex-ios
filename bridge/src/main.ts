@@ -55,11 +55,12 @@ export async function startBridge(config: RuntimeConfig, dependencies: Dependenc
   const requireValue = <T>(value: T | undefined): T => { if (!value) throw new ApiError(503, 'upstream_unavailable', 'Codex is reconnecting'); return value; };
   // Real control probe passed on 0.167.0. Other request-generation paths stay
   // disabled until independently exercised against the native server.
-  const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: true, permissions: false, questions: true, mcp: false };
+  const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: true, permissions: false, questions: true, mcp: false, threadMetadata: true };
   const api = createApiServer({ token, info: { apiVersion: 1, serverId, codexVersion: '0.167.0', features }, available: () => available,
     queries: {
       queryProjects: () => requireValue(queries).queryProjects(), queryModels: () => requireValue(queries).queryModels(),
       queryThreads: input => requireValue(queries).queryThreads(input), querySnapshot: id => requireValue(queries).querySnapshot(id), queryItems: (id, cursor) => requireValue(queries).queryItems(id, cursor),
+      queryMetadata: id => requireValue(queries).queryMetadata(id),
     }, commands: { dispatch: command => requireValue(commands).dispatch(command) }, operations: { getOperation: id => requireValue(operations).getOperation(id) },
     sync: { replay: cursor => sync?.replay(cursor) ?? 'resync_required', onEvent: handler => { listeners.add(handler); return () => { listeners.delete(handler); }; } },
   });

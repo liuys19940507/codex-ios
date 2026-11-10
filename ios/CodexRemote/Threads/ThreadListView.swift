@@ -28,7 +28,7 @@ private struct WorkspaceView: View {
         _session = StateObject(wrappedValue: session)
         _lifecycle = StateObject(wrappedValue: lifecycle)
         _settings = StateObject(wrappedValue: ModelSettings(serverID: server.id, transport: transport))
-        _threads = StateObject(wrappedValue: ThreadListModel(transport: transport))
+        _threads = StateObject(wrappedValue: ThreadListModel(transport: transport, serverID: server.id))
         _sender = StateObject(wrappedValue: CommandSender(serverID: server.id, transport: transport, canSend: { [weak lifecycle] in lifecycle?.canWrite($0) == true }))
     }
     var body: some View {
@@ -95,25 +95,15 @@ struct ThreadListView: View {
                 }
             }
             if let message = model.projectMessage { Section { Text(message).foregroundStyle(.secondary) } }
+            if let message = model.pinMessage { Section { Text(message).font(.footnote).foregroundStyle(.secondary) } }
+            if !model.visiblePinnedThreads.isEmpty {
+                Section("置顶任务") { taskRows(model.visiblePinnedThreads) }
+            }
             if model.loading || !model.hasLoaded { ProgressView("正在读取任务…") }
-            else if model.threads.isEmpty && model.message == nil { Text(query.isEmpty ? "暂无会话" : "没有匹配的任务").foregroundStyle(.secondary) }
-            ForEach(model.threads) { thread in
-                NavigationLink(value: thread.id) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(thread.title).font(.headline).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                        Text(status(thread)).font(.caption).foregroundStyle(.secondary)
-                        if let project = model.projects.first(where: { $0.id == thread.projectId }) {
-                            Text(project.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                        }
-                    }.padding(.vertical, 4)
-                }
-                .disabled(session.currentServerID != serverID || session.transport == nil)
-                .contextMenu {
-                    Button("重命名") { renameTitle = thread.title; renaming = thread }
-                        .disabled(sender.busy || !sender.canSubmit(.rename))
-                    Button("归档", role: .destructive) { archiving = thread }
-                        .disabled(sender.busy || !sender.canSubmit(.archive) || thread.activeTurnId != nil || thread.status == "active")
-                }
+            else if model.threads.isEmpty && model.visiblePinnedThreads.isEmpty && model.message == nil { Text(query.isEmpty ? "暂无会话" : "没有匹配的任务").foregroundStyle(.secondary) }
+            if model.visiblePinnedThreads.isEmpty { taskRows(model.unpinnedThreads) }
+            else if !model.unpinnedThreads.isEmpty {
+                Section("其他任务") { taskRows(model.unpinnedThreads) }
             }
             if let message = model.message {
                 Section {
@@ -163,7 +153,7 @@ struct ThreadListView: View {
                 let title = renameTitle
                 Task {
                     let result = await sender.submit(method: .rename, params: ["threadId": .string(target.id), "title": .string(title)])
-                    if result.state == .accepted { await model.reload(projectID: projectID, query: query) }
+                    if result.state == .accepted { model.renamePinned(target.id, title: title); await model.reload(projectID: projectID, query: query) }
                 }
             }.disabled(renameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sender.busy)
             Button("取消", role: .cancel) { renaming = nil }
@@ -173,10 +163,44 @@ struct ThreadListView: View {
                 guard let target = archiving else { return }
                 Task {
                     let result = await sender.submit(method: .archive, params: ["threadId": .string(target.id)])
-                    if result.state == .accepted { await model.reload(projectID: projectID, query: query) }
+                    if result.state == .accepted { model.removePin(target.id); await model.reload(projectID: projectID, query: query) }
                 }
             }
             Button("取消", role: .cancel) { archiving = nil }
+        }
+    }
+    private func taskRows(_ threads: [ThreadSummary]) -> some View {
+        ForEach(threads) { thread in
+            NavigationLink(value: thread.id) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(thread.title).font(.headline).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                        Text(status(thread)).font(.caption).foregroundStyle(.secondary)
+                        if let project = model.projects.first(where: { $0.id == thread.projectId }) {
+                            Text(project.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if model.isPinned(thread.id) { Image(systemName: "pin.fill").font(.caption).foregroundStyle(.orange).accessibilityHidden(true) }
+                }.padding(.vertical, 4)
+            }
+            .accessibilityIdentifier("thread-row-\(thread.id)")
+            .accessibilityValue(model.isPinned(thread.id) ? "已置顶" : "")
+            .disabled(session.currentServerID != serverID || session.transport == nil)
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button { model.togglePin(thread) } label: {
+                    Label(model.isPinned(thread.id) ? "取消置顶" : "置顶", systemImage: model.isPinned(thread.id) ? "pin.slash" : "pin")
+                }.tint(.orange)
+            }
+            .contextMenu {
+                Button { model.togglePin(thread) } label: {
+                    Label(model.isPinned(thread.id) ? "取消置顶" : "置顶", systemImage: model.isPinned(thread.id) ? "pin.slash" : "pin")
+                }
+                Button("重命名") { renameTitle = thread.title; renaming = thread }
+                    .disabled(sender.busy || !sender.canSubmit(.rename))
+                Button("归档", role: .destructive) { archiving = thread }
+                    .disabled(sender.busy || !sender.canSubmit(.archive) || thread.activeTurnId != nil || thread.status == "active")
+            }
         }
     }
     private func status(_ thread: ThreadSummary) -> String {

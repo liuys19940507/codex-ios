@@ -43,7 +43,7 @@ final class PinnedThreadTests: XCTestCase {
         XCTAssertEqual(model.visiblePinnedThreads.first?.title, "Updated 中文😀")
         XCTAssertEqual(model.visiblePinnedThreads.first?.status, "active")
         XCTAssertEqual(model.unpinnedThreads.map(\.id), ["one", "two", "three"])
-        let reads = await transport.snapshotReads
+        let reads = await transport.metadataReads
         XCTAssertEqual(reads, ["older"])
         await model.reload(projectID: "project", query: "中文😀")
         XCTAssertEqual(model.visiblePinnedThreads.map(\.id), ["older"])
@@ -79,6 +79,19 @@ final class PinnedThreadTests: XCTestCase {
         XCTAssertEqual(model.pinnedThreads.map(\.id), ["offline"])
         XCTAssertEqual(try store.load(serverID: server).map(\.id), ["offline"])
         XCTAssertNotNil(model.pinMessage)
+    }
+
+    @MainActor
+    func testOlderBridgeKeepsCachedPinsWithoutCallingAnUnsupportedEndpoint() async throws {
+        let folder = temporaryFolder(); defer { try? FileManager.default.removeItem(at: folder) }
+        let store = PinnedThreadStore(url: folder.appendingPathComponent("pins.json")), server = UUID()
+        try store.save([pinThread("deleted", "Still a valid cached pin")], serverID: server)
+        let transport = PinTransport(metadataSupported: false)
+        let model = ThreadListModel(transport: transport, serverID: server, pinStore: store)
+        await model.reload(projectID: nil, query: "")
+        XCTAssertEqual(model.pinnedThreads.map(\.id), ["deleted"])
+        let reads = await transport.metadataReads
+        XCTAssertTrue(reads.isEmpty)
     }
 
     @MainActor
@@ -131,11 +144,12 @@ private func pinThread(_ id: String, _ title: String, project: String = "project
 
 private actor PinTransport: BridgeTransport {
     let paginated: Bool
-    private(set) var snapshotReads: [String] = []
+    let metadataSupported: Bool
+    private(set) var metadataReads: [String] = []
     private(set) var commandCount = 0
     private var shouldHold = false
     private var pending: CheckedContinuation<Void, Never>?
-    init(paginated: Bool = false) { self.paginated = paginated }
+    init(paginated: Bool = false, metadataSupported: Bool = true) { self.paginated = paginated; self.metadataSupported = metadataSupported }
     func holdOlder() { shouldHold = true }
     func waitForHeldRequest() async -> Bool {
         let deadline = Date().addingTimeInterval(3)
@@ -145,6 +159,9 @@ private actor PinTransport: BridgeTransport {
     func releaseOlder() { pending?.resume(); pending = nil }
     func get<T: Decodable & Sendable>(_ path: String, as: T.Type) async throws -> T {
         let url = URLComponents(string: "https://fixture.invalid" + path)!
+        if url.path == "/v1/info" {
+            return ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["threadMetadata": metadataSupported]) as! T
+        }
         if url.path == "/v1/threads" {
             let query = url.queryItems?.first(where: { $0.name == "query" })?.value ?? ""
             let project = url.queryItems?.first(where: { $0.name == "projectId" })?.value
@@ -156,13 +173,13 @@ private actor PinTransport: BridgeTransport {
             return ThreadPage(data: selected, nextCursor: paginated && cursor == nil ? "next" : nil) as! T
         }
         let parts = url.path.split(separator: "/")
-        guard parts.count == 4, parts[3] == "snapshot" else { throw ConnectionError.invalidPath }
-        let id = String(parts[2]); snapshotReads.append(id)
+        guard parts.count == 4, parts[3] == "metadata", metadataSupported else { throw ConnectionError.invalidPath }
+        let id = String(parts[2]); metadataReads.append(id)
         if id == "deleted" { throw ConnectionError.server(404, "Not found") }
         if id == "offline" { throw URLError(.networkConnectionLost) }
         if id == "older", shouldHold { shouldHold = false; await withCheckedContinuation { pending = $0 } }
         let thread = id == "older" ? pinThread(id, "Updated 中文😀", active: true) : pinThread(id, "Fresh " + id, project: id == "elsewhere" ? "other-project" : "project")
-        return Snapshot(cursor: Cursor(epoch: "fixture", seq: 0), thread: thread, items: [], itemsCursor: nil, pending: [], policy: Snapshot.Policy(approvalPolicy: nil, sandbox: nil)) as! T
+        return thread as! T
     }
     func command(_ command: Command) async throws -> CodexRemote.Operation { commandCount += 1; throw ConnectionError.invalidPath }
     nonisolated func events(after: Cursor?) -> AsyncThrowingStream<EventFrame, Error> { AsyncThrowingStream { _ in } }

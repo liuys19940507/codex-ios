@@ -13,10 +13,11 @@ final class PinningUITests: XCTestCase {
         screenshot.name = "multiple-pinned-tasks"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.terminate(); app.launch()
         XCTAssertTrue(app.staticTexts["Pin task two"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Fixture task"].waitForExistence(timeout: 10))
         assertOrder(app)
         app.staticTexts["Pin task two"].press(forDuration: 1)
         app.buttons["取消置顶"].tap()
-        XCTAssertEqual(app.buttons["thread-row-pin-two"].value as? String, "")
+        XCTAssertNotEqual(row("pin-two", in: app).value as? String, "已置顶")
         app.staticTexts["Pin task one"].press(forDuration: 1)
         app.buttons["取消置顶"].tap()
         XCTAssertFalse(app.staticTexts["置顶任务"].exists)
@@ -27,12 +28,15 @@ final class PinningUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["置顶任务"].waitForExistence(timeout: 5))
     }
     private func assertOrder(_ app: XCUIApplication) {
-        let one = app.buttons["thread-row-pin-one"], two = app.buttons["thread-row-pin-two"]
+        let one = row("pin-one", in: app), two = row("pin-two", in: app)
         XCTAssertEqual(one.value as? String, "已置顶")
         XCTAssertEqual(two.value as? String, "已置顶")
         XCTAssertLessThan(two.frame.minY, one.frame.minY)
-        XCTAssertLessThan(one.frame.minY, app.buttons["thread-row-fixture-thread"].frame.minY)
-        XCTAssertEqual(app.buttons.matching(identifier: "thread-row-pin-one").count, 1)
-        XCTAssertEqual(app.buttons.matching(identifier: "thread-row-pin-two").count, 1)
+        XCTAssertLessThan(one.frame.minY, row("fixture-thread", in: app).frame.minY)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", "Pin task one")).count, 1)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", "Pin task two")).count, 1)
+    }
+    private func row(_ id: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "thread-row-" + id).firstMatch
     }
 }

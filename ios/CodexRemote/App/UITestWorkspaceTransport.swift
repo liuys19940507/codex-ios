@@ -14,6 +14,10 @@ actor UITestWorkspaceTransport: BridgeTransport {
     private var subscribers: [UUID: AsyncThrowingStream<EventFrame, Error>.Continuation] = [:]
     init(activity: Bool = false) {
         self.activity = activity
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-pins") {
+            threads += [ThreadSummary(id: "pin-one", projectId: "fixture-project", title: "Pin task one", status: "idle", activeTurnId: nil, parentId: nil),
+                        ThreadSummary(id: "pin-two", projectId: "fixture-project", title: "Pin task two", status: "idle", activeTurnId: nil, parentId: nil)]
+        }
         if activity { threads.append(ThreadSummary(id: "fixture-child", projectId: "fixture-project", title: "Child fixture task", status: "idle", activeTurnId: nil, parentId: "fixture-thread")) }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-pending") {
             threads[0].status = "active"; threads[0].activeTurnId = "fixture-turn"
@@ -25,7 +29,7 @@ actor UITestWorkspaceTransport: BridgeTransport {
         let components = URLComponents(string: "https://fixture.invalid" + path)!
         switch components.path {
         case "/v1/info":
-            return ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "approvals": true]) as! T
+            return ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "approvals": true, "threadMetadata": true]) as! T
         case "/v1/projects":
             return [Project(id: "fixture-project", name: "Fixture Project", path: "C:/fixture")] as! T
         case "/v1/models":
@@ -37,6 +41,7 @@ actor UITestWorkspaceTransport: BridgeTransport {
             let parts = components.path.split(separator: "/")
             guard parts.count == 4, parts[1] == "threads", let thread = threads.first(where: { $0.id == parts[2] }) else { throw ConnectionError.invalidPath }
             if parts[3] == "items" { return ItemPage(data: [], nextCursor: nil) as! T }
+            if parts[3] == "metadata" { return thread as! T }
             guard parts[3] == "snapshot" else { throw ConnectionError.invalidPath }
             var items = [Item(id: "reply", turnId: "fixture-turn", kind: "agentMessage", text: "Fixture reply", data: .object(["completed": .bool(true), "prefixComplete": .bool(true)]))]
             if activity && thread.parentId == nil {

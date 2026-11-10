@@ -9,7 +9,7 @@ export interface ApiContext {
   token: string;
   info: { apiVersion: number; serverId: string; codexVersion: string; features: Record<string, boolean> };
   available(): boolean;
-  queries: Pick<Queries, 'queryProjects' | 'queryModels' | 'queryThreads' | 'querySnapshot' | 'queryItems'>;
+  queries: Pick<Queries, 'queryProjects' | 'queryModels' | 'queryThreads' | 'queryMetadata' | 'querySnapshot' | 'queryItems'>;
   commands: { dispatch(command: Command): Promise<Operation> };
   operations: { getOperation(id: string): Operation | null };
   sync: { replay(cursor: Cursor): Envelope[] | 'resync_required'; onEvent(handler: (event: Envelope) => void): () => void };
@@ -96,10 +96,11 @@ export function createApiServer(context: ApiContext) {
     else if (method === 'GET' && path === '/v1/threads') result = await context.queries.queryThreads(parameters(url, ['projectId', 'query', 'cursor']));
     else if (method === 'POST' && path === '/v1/commands') { parameters(url, []); result = await context.commands.dispatch(validateCommand(await body(request))); }
     else {
-      const thread = /^\/v1\/threads\/([^/]+)\/(snapshot|items)$/.exec(path);
+      const thread = /^\/v1\/threads\/([^/]+)\/(metadata|snapshot|items)$/.exec(path);
       if (method !== 'GET' || !thread) throw new ApiError(404, 'not_found', 'Unknown endpoint');
       const id = decodeURIComponent(thread[1]!);
-      if (thread[2] === 'snapshot') { parameters(url, []); result = await context.queries.querySnapshot(id); }
+      if (thread[2] === 'metadata') { parameters(url, []); result = await context.queries.queryMetadata(id); }
+      else if (thread[2] === 'snapshot') { parameters(url, []); result = await context.queries.querySnapshot(id); }
       else result = await context.queries.queryItems(id, parameters(url, ['cursor']).cursor);
     }
     reply(response, 200, result);

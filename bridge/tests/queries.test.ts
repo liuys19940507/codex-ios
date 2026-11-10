@@ -71,6 +71,20 @@ test('history_is_read_only_and_only_known_policy_fields_are_exposed',async t=>{
   assert.equal(JSON.stringify(snapshot).includes('secretField'),false);
 });
 
+test('metadata_read_does_not_subscribe_even_when_the_thread_is_loaded',async t=>{
+  const f=await fixture(t,{loaded:true});
+  const result=await f.queries.queryMetadata('parent');
+  assert.equal(result.id,'parent');assert.equal(result.title,'Parent');
+  assert.deepEqual(f.calls,[{method:'thread/read',params:{threadId:'parent',includeTurns:false}}]);
+  assert.equal('items' in result,false);assert.equal('secretField' in result,false);
+});
+
+test('metadata_read_cannot_expose_an_unconfigured_project',async t=>{
+  const f=await fixture(t,{loaded:true});
+  await assert.rejects(f.queries.queryMetadata('foreign'),(e:unknown)=>e instanceof ApiError&&e.status===404);
+  assert.deepEqual(f.calls.map(call=>call.method),['thread/read']);
+});
+
 test('snapshot_and_history_pages_are_bounded_and_have_no_duplicate_anchor',async t=>{
   const f=await fixture(t),snapshot=await f.queries.querySnapshot('parent');
   assert.equal(snapshot.items.length,50);assert.ok(snapshot.itemsCursor);

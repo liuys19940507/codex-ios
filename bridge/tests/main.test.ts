@@ -12,9 +12,10 @@ import { fakeServer, handshake } from './support/fake-server.js';
 
 async function fixture(t:TestContext) {
   const stateDir=await mkdtemp(join(tmpdir(),'codex-main-'));
-  let socket:WebSocket|undefined;
+  let socket:WebSocket|undefined;const calls:string[]=[];
   const server=await fakeServer((peer,m)=>{
     socket=peer;if(handshake(peer,m)||m.method==='initialized')return;
+    calls.push(m.method!);
     const thread={id:'own',cwd:'C:/controlled',name:'Test',status:{type:'notLoaded'},turns:[]};
     peer.send(JSON.stringify({id:m.id,result:m.method==='thread/loaded/list'?{data:[]}:{thread}}));
   });
@@ -26,8 +27,25 @@ async function fixture(t:TestContext) {
   const dependencies={addresses:()=>['127.0.0.1'],secure:async(_path:string)=>{},ensureService:async()=>({instanceId:'test',pid:0,codexUrl:server.url,bridgeUrl:`http://127.0.0.1:${bridgePort}`})};
   let runtime:Awaited<ReturnType<typeof startBridge>>|undefined;
   t.after(async()=>{await runtime?.close();await server.close();await rm(stateDir,{recursive:true,force:true});});
-  return {config,dependencies,start:async()=>runtime=await startBridge(config,dependencies),cut:()=>socket!.terminate()};
+  return {config,dependencies,calls,start:async()=>runtime=await startBridge(config,dependencies),cut:()=>socket!.terminate()};
 }
+
+test('metadata_feature_and_authenticated_endpoint_only_read_thread_metadata',async t=>{
+  const f=await fixture(t),runtime=await f.start();
+  const token=(await readFile(join(f.config.stateDir,'bridge-token'),'utf8')).trim();
+  const url=`http://${f.config.bridgeHost}:${f.config.bridgePort}`,headers={Authorization:`Bearer ${token}`};
+  assert.equal((await fetch(`${url}/v1/threads/own/metadata`)).status,401);
+  assert.equal(f.calls.length,0);
+  const info=await fetch(`${url}/v1/info`,{headers}).then(r=>r.json()) as any;
+  assert.equal(info.features.threadMetadata,true);
+  const response=await fetch(`${url}/v1/threads/own/metadata`,{headers});
+  assert.equal(response.status,200);
+  const body=await response.json() as any;assert.equal(body.id,'own');assert.equal(body.title,'Test');
+  assert.equal('items' in body,false);
+  assert.deepEqual(f.calls,['thread/read']);
+  assert.equal((await fetch(`${url}/v1/threads/own/metadata?cursor=unexpected`,{headers})).status,400);
+  assert.deepEqual(f.calls,['thread/read']);
+});
 
 test('missing_configured_network_address_fails_before_starting_any_service',async t=>{
   const f=await fixture(t);let starts=0;

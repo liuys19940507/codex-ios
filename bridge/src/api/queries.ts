@@ -104,6 +104,11 @@ export function createQueries(context:QueryContext) {
     }
     throw new ApiError(503,'upstream_invalid','Model catalog exceeded its page limit');
   }
-  return {queryThreads,querySnapshot,queryItems,queryModels,authorizeThread,queryProjects:()=>context.discoverProjects?refreshProjects():catalog.all()};
+  async function queryMetadata(threadId:string):Promise<ThreadSummary> {
+    // Pin refresh must never call Sync.snapshot: that can subscribe to a
+    // loaded thread and retain its writer independently of the selected view.
+    return summary(await authorizeThread(threadId),store);
+  }
+  return {queryThreads,queryMetadata,querySnapshot,queryItems,queryModels,authorizeThread,queryProjects:()=>context.discoverProjects?refreshProjects():catalog.all()};
 }
 export type Queries=ReturnType<typeof createQueries>;
