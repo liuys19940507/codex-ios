@@ -15,7 +15,6 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         for _ in 0..<8 where !draft.isHittable { app.swipeUp() }
         draft.tap(); draft.typeText("parent draft stays")
-        app.tap() // Keep the navigation test independent of keyboard focus.
         let child = app.buttons["打开子任务"]
         for _ in 0..<8 where !child.isHittable { app.swipeDown() }
         child.tap()

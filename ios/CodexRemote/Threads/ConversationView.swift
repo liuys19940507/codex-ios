@@ -30,16 +30,9 @@ struct ConversationView: View {
                         }
                         if let message = session.historyMessage { Text(message).font(.footnote).foregroundStyle(.secondary) }
                         ForEach(snapshot.items) { item in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(title(item)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                Text(item.text.isEmpty ? "暂无文字输出" : item.text).textSelection(.enabled)
-                                if case .object(let data) = item.data, data["prefixComplete"] == .bool(false) {
-                                    Text(snapshot.thread.activeTurnId == item.turnId ? "部分输出，结束后自动补齐" : "此段输出可能不完整")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading).id(item.id)
+                            ActivityView(item: item, partial: snapshot.thread.activeTurnId == item.turnId).id(item.id)
                         }
+                        if let parent = snapshot.thread.parentId { NavigationLink("返回父任务", value: parent) }
                         ForEach(snapshot.pending) { request in
                             ApprovalView(request: request, snapshot: snapshot, features: connection.info?.features ?? [:])
                         }
@@ -54,7 +47,7 @@ struct ConversationView: View {
                     OperationStatusView()
                     Color.clear.frame(height: 1).id("conversation-end")
                 }.padding()
-            }
+            }.scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     if connection.info?.features["interrupt"] == true, let current = session.snapshot, current.thread.id == threadID, let turn = current.thread.activeTurnId {
@@ -72,15 +65,5 @@ struct ConversationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: threadID) { await session.selectThread(threadID) }
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
-    }
-    private func title(_ item: Item) -> String {
-        switch item.kind {
-        case "userMessage": return "你"
-        case "agentMessage": return "助手"
-        case "plan": return "计划"
-        case "diff", "fileChange": return "文件变更"
-        case "commandExecution": return "命令执行"
-        default: return "工具活动"
-        }
     }
 }
