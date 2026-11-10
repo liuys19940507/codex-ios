@@ -138,7 +138,7 @@ struct NewTaskView: View {
     var body: some View {
         Form {
             Section {
-                Picker("项目", selection: $projectID) { ForEach(projects) { Text($0.name).tag($0.id) } }
+                Picker("项目", selection: $projectID) { ForEach(projects) { Text("\($0.name) · \($0.path)").tag($0.id) } }
                 if let id = settings.selection?.modelID { Text("模型：\(id) · \(settings.selection?.reasoning ?? "默认推理强度")").font(.footnote).foregroundStyle(.secondary) }
                 else { Text("沿用 Windows 当前默认配置。").font(.footnote).foregroundStyle(.secondary) }
             }

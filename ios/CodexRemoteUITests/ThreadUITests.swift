@@ -68,7 +68,12 @@ final class ThreadUITests: XCTestCase {
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
         draft.tap(); draft.typeText("controlled create")
         app.buttons["创建并发送"].tap()
-        XCTAssertTrue(app.navigationBars["Created fixture task"].waitForExistence(timeout: 10))
+        let opened = app.navigationBars["Created fixture task"].waitForExistence(timeout: 10)
+        if !opened {
+            let state = XCTAttachment(string: app.debugDescription)
+            state.name = "create-task-navigation-state"; state.lifetime = .keepAlways; add(state)
+        }
+        XCTAssertTrue(opened)
     }
 
     func testRenameAndArchiveFromThreadMenu() {

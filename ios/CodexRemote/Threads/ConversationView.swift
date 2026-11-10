@@ -67,8 +67,9 @@ struct ConversationView: View {
                 bottomPosition = position
                 if readingGesture || Date() < manualScrollUntil { followingLatest = isNearBottom }
                 else if isNearBottom { followingLatest = true }
+                followIfNeeded(proxy)
             }
-            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0 }
+            .onPreferenceChange(ConversationComposerKey.self) { composerPosition = $0; followIfNeeded(proxy) }
             .simultaneousGesture(DragGesture()
                 .updating($readingGesture) { _, state, _ in state = true }
                 .onChanged { _ in manualScrollUntil = Date().addingTimeInterval(2) }
@@ -108,6 +109,14 @@ struct ConversationView: View {
         .onChange(of: session.snapshot?.thread) { if let thread = $0, thread.id == threadID { title = thread.title } }
     }
     private var isNearBottom: Bool { composerPosition > 0 && bottomPosition <= composerPosition + 80 }
+    private func followIfNeeded(_ proxy: ScrollViewProxy) {
+        guard followingLatest, !readingGesture, Date() >= manualScrollUntil, !isNearBottom, composerPosition > 0, !session.historyLoading else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard followingLatest, !readingGesture, Date() >= manualScrollUntil, session.selectedThreadID == threadID else { return }
+            proxy.scrollTo("conversation-end", anchor: .bottom)
+        }
+    }
     private var draftAction: ((String) -> Void)? {
         guard composer.writable else { return nil }
         return { text in composer.text += composer.text.isEmpty ? text : "\n\n" + text }

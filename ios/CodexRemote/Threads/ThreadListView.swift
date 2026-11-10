@@ -72,6 +72,7 @@ struct ThreadListView: View {
     @State private var projectID: String?
     @State private var query = ""
     @State private var creating = false
+    @State private var createdThreadID: String?
     @State private var renaming: ThreadSummary?
     @State private var renameTitle = ""
     @State private var archiving: ThreadSummary?
@@ -89,7 +90,7 @@ struct ThreadListView: View {
                 Section {
                     Picker("项目", selection: $projectID) {
                         Text("全部项目").tag(nil as String?)
-                        ForEach(model.projects) { project in Text(project.name).tag(Optional(project.id)) }
+                        ForEach(model.projects) { project in Text("\(project.name) · \(project.path)").tag(Optional(project.id)) }
                     }
                 }
             }
@@ -145,10 +146,12 @@ struct ThreadListView: View {
             await model.reload(projectID: projectID, query: query)
         }
         .refreshable { await model.loadProjects(); await model.reload(projectID: projectID, query: query) }
-        .sheet(isPresented: $creating) {
+        .sheet(isPresented: $creating, onDismiss: {
+            if let id = createdThreadID { createdThreadID = nil; openThread(id) }
+        }) {
             NavigationStack {
                 NewTaskView(projects: model.projects, serverID: serverID, selectedProjectID: projectID) { id in
-                    creating = false; openThread(id)
+                    createdThreadID = id; creating = false
                     Task { await model.reload(projectID: projectID, query: query) }
                 }
             }.environmentObject(sender).environmentObject(session).environmentObject(settings).environmentObject(lifecycle)

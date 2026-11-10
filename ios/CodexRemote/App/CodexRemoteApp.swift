@@ -24,6 +24,14 @@ struct CodexRemoteApp: App {
         WindowGroup {
             AppRootView()
             .environmentObject(connection)
+            .preferredColorScheme(testColorScheme)
         }
+    }
+    private var testColorScheme: ColorScheme? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-test-rendering") { return arguments.contains("--ui-test-dark") ? .dark : .light }
+        #endif
+        return nil
     }
 }
