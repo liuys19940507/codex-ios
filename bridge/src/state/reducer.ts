@@ -22,12 +22,14 @@ export function projectItem(raw:unknown,turnId:string,completed:boolean,prefixCo
     data.prefixComplete=true;data.completed=true;
   } else if(kind==='commandExecution') {
     text=String(item.aggregatedOutput??'');
-    data={...data,command:String(item.command??''),status:String(item.status??'unknown'),exitCode:typeof item.exitCode==='number'?item.exitCode:null};
+    data={...data,command:String(item.command??''),status:String(item.status??'unknown'),exitCode:typeof item.exitCode==='number'?item.exitCode:null,
+      durationMs:typeof item.durationMs==='number'&&Number.isFinite(item.durationMs)&&item.durationMs>=0?item.durationMs:null};
   } else if(kind==='fileChange')data={...data,changes:Array.isArray(item.changes)?item.changes:[],status:String(item.status??'unknown')};
   else if(kind==='reasoning')text=(Array.isArray(item.summary)?item.summary:[]).join('\n');
   else if(kind==='collabAgentToolCall')data={...data,tool:String(item.tool??''),status:String(item.status??''),childThreadIds:Array.isArray(item.receiverThreadIds)?item.receiverThreadIds:[]};
   else if(kind==='mcpToolCall')data={...data,server:String(item.server??''),tool:String(item.tool??''),status:String(item.status??''),result:item.result??null,error:item.error??null};
   else if(kind==='dynamicToolCall')data={...data,tool:String(item.tool??''),status:String(item.status??'')};
   else text=`Unsupported activity: ${kind}`;
+  if(kind==='agentMessage'&&['commentary','final_answer'].includes(item.phase))data.phase=item.phase;
   return {id:String(item.id),turnId,kind,text,data};
 }

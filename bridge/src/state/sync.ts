@@ -143,13 +143,15 @@ export class SyncService {
     const response=object(value),thread=object(response.thread),page=object(response.initialTurnsPage);
     const turns:Array<Record<string,any>>=Array.isArray(page.data)?[...page.data].reverse():Array.isArray(thread.turns)?thread.turns:[];
     const threadSummary=summary({...thread,turns},this.store);
+    const pending=this.store.has(threadSummary.id)?this.store.snapshot(threadSummary.id).pending.filter(request=>
+      request.turnId===threadSummary.activeTurnId&&this.store.pending(request.id)?.connectionId===this.connectionId&&request.state!=='resolved'):[];
     const items:Item[]=[];
     for(const turn of turns)for(const raw of Array.isArray(turn.items)?turn.items:[]) {
       const item=object(raw);
       const completed=turn.status==='completed'||item.completedAtMs!=null||['completed','failed','declined'].includes(String(item.status));
       items.push(projectItem(raw,String(turn.id),completed));
     }
-    const snapshot:Snapshot={cursor:this.store.cursor(),thread:threadSummary,items,itemsCursor:response.itemsBackwardsCursor??null,pending:[],
+    const snapshot:Snapshot={cursor:this.store.cursor(),thread:threadSummary,items,itemsCursor:response.itemsBackwardsCursor??null,pending,
       ...(this.readOnly.has(threadSummary.id)?{readOnlyReason:this.readOnly.get(threadSummary.id)!}:{}),
       policy:{approvalPolicy:typeof response.approvalPolicy==='string'?response.approvalPolicy:null,
         sandbox:typeof object(response.sandbox).type==='string'?response.sandbox.type:null}};

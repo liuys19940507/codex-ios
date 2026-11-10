@@ -9,6 +9,14 @@ import { createSync, type SyncService } from '../src/state/sync.js';
 import { connectRpc, type RpcClient } from '../src/protocol/rpc-client.js';
 import { fakeServer, handshake } from './support/fake-server.js';
 import type { Json } from '../src/api/contracts.js';
+import { projectItem } from '../src/state/reducer.js';
+
+test('presentation_fields_keep_message_phase_and_command_duration',()=>{
+  const message=projectItem({id:'a',type:'agentMessage',text:'working',phase:'commentary'},'turn',false);
+  assert.equal((message.data as Record<string,Json>).phase,'commentary');
+  const command=projectItem({id:'b',type:'commandExecution',command:'echo test',durationMs:1234},'turn',true);
+  assert.equal((command.data as Record<string,Json>).durationMs,1234);
+});
 
 const delta=(text:string):Json=>({method:'item/agentMessage/delta',params:{threadId:'thread',turnId:'turn',itemId:'message',delta:text}});
 const completion=(text:string):Json=>({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{type:'agentMessage',id:'message',text,completedAtMs:100}}});
@@ -102,6 +110,17 @@ test('release_waits_for_an_inflight_snapshot_before_unsubscribing',async t=>{
   const leaving=f.sync.release('thread',attachment);
   await Promise.all([attaching,leaving]);
   assert.equal(f.calls.at(-1),'thread/unsubscribe');
+});
+
+test('refresh_preserves_pending_approval_from_current_turn_on_the_same_native_connection',async t=>{
+  const f=await fixture(t);
+  f.sync.applyEvent({connectionId:f.sync.connectionId,ordinal:1,message:{id:77,method:'item/commandExecution/requestApproval',params:{threadId:'thread',turnId:'turn',itemId:'shell',command:'controlled',availableDecisions:['accept','cancel']}}});
+  const original=f.store.snapshot('thread').pending[0]!;
+  assert.ok(original);
+  const fresh=await f.sync.attach('thread','00000000-0000-4000-8000-000000000001');
+  assert.equal(fresh.pending.length,1);
+  assert.equal(fresh.pending[0]?.id,original.id);
+  assert.equal(fresh.pending[0]?.state,'pending');
 });
 
 test('announced_thread_still_attaches_before_treating_cached_state_as_live',async t=>{
