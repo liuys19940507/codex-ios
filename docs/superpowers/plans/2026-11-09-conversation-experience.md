@@ -69,7 +69,7 @@
 **Interfaces:** raw Item.text retained; Markdown renderer/custom code block never transforms copy value and suppresses remote images; DiffDocument parses file/header/hunk lines into additions/deletions/partial markers with raw fallback.
 
 - [x] Add RED fixtures/tests for Markdown/code fencing, empty known items, reasoning summaries, multi-file patches, +++ inside hunk, CRLF, Unicode and truncated patches.
-- [ ] Implement rich text/theme, language+copy/full viewer, terminal tail preview and file summaries; verify cloud unit/UI/device build and screenshots. Commit.
+- [x] Implement rich text/theme, language+copy/full viewer, terminal tail preview and file summaries; verify cloud unit/UI/device build and screenshots. Commit.
 
 ### T5: Turn activity timeline and persistent composer
 
@@ -77,8 +77,8 @@
 
 **Interfaces:** forward optional agent phase/duration; `ConversationTimeline.rows(items:[Item])` emits user/final messages and one process group per contiguous turn keyed by turnID. Pending requests stay outside collapsible process. Composer pinned in safeAreaInset with bounded multiline growth; new-task form remains usable. Follow bottom only when user near bottom, explicit latest button always available.
 
-- [ ] Add RED tests for commentary/final/no-phase messages, same item IDs across pagination, empty metadata, pending forms and child navigation; add UI checks and screenshot attachments.
-- [ ] Implement and verify tests/rendered simulator screenshots; update feature comparison and validation notes. Commit.
+- [x] Add RED tests for commentary/final/no-phase messages, same item IDs across pagination, empty metadata, pending forms and child navigation; add UI checks and screenshot attachments.
+- [x] Implement and verify tests/rendered simulator screenshots; update feature comparison and validation notes. Commit.
 
 ### T5b: User-approved Codemagic migration
 
@@ -87,16 +87,18 @@
 **Interfaces:** personal mac_mini_m2, Xcode26.3; one serial workflow runs existing simulator tests, requires actual passing xcresult summary, exports screenshots/results even on test failure, then builds the unsigned arm64 IPA with commit/hash. No Apple signing credentials. Retain existing private GitHub origin; GitHub iOS workflow becomes manual fallback. Manual Codemagic build initially avoids duplicate automatic runs. Installer persists XcodeGen PATH through CM_ENV or GITHUB_PATH.
 
 - [x] RED local orchestration checks for failed/missing tests preventing packaging and retained diagnosis, then GREEN runner; validate YAML against official schema and shell syntax. Commit/push configuration.
-- [ ] Connect user personal Codemagic account/private repository, run exact candidate and inspect real logs/tests/screenshots/IPA. Login/repository access requires user browser or locally supplied API credential; no paid billing changes.
+- [x] Connect user personal Codemagic account/private repository, run exact candidate and inspect real logs/tests/screenshots/IPA. Login/repository access requires user browser or locally supplied API credential; no paid billing changes.
 
 ### T5c: Approved independent task-creation form
 
 After three failed layout fixes, the user explicitly approved an independent form. First collect the DEBUG-only button/send/receipt trace from the existing failing test. Then make the complete form own one ComposerModel and its submit action at the navigation/Form root, rather than deriving toolbar actions from a generic composer inside a Form cell. Resolve sender/model preferences synchronously at the action boundary. Keep `__new__:<projectId>` draft namespaces, accepted-only clearing, operation journal/idempotency, and the existing returned-thread navigation callback. Disable project switching/dismissal immediately during submission. ComposerView becomes conversation-only. Keep UI diagnostics until the accepted path is verified, then remove temporary instrumentation before final review.
 
 - [x] Observe call-chain diagnosis, implement independent form and verify existing create UI test with preserved draft/receipt behavior.
-- [ ] Verify largest-text Markdown scales once and process/copy/child/parent-draft controls remain reachable; inspect actual screenshots.
+- [x] Verify largest-text Markdown scales once and process/copy/child/parent-draft controls remain reachable; inspect actual screenshots.
 
 ### T6: Verify, review and package
+
+One final review has completed (ffadf72..2114d7f), verdict with fixes, no Critical. Do not repeat it. Attachment lifecycle races are fixed and deployed (103 Node/typecheck); explicit cwd parsing is fixed (15 Pester plus isolated native probe); nonstarving render tests pass. Current iOS suite is81/82: the new active approval test hangs during history scrolling before submission. A static-indicator experiment failed and was reverted. Diagnostic-only workflow captures owned simulator stacks; it cannot package. A fresh complete82-test/device build and phone cover-install gate remain required. Two Minor items (viewer chunk visual breaks and README status) are deferred.
 
 - [ ] Run Windows tests/typecheck/Pester and fresh macOS iOS unit/UI/device checks for final source. One fresh final reviewer for this new phase, resolve Important/Critical with tests; no repeated baseline review.
 - [ ] Safely restart only the verified own bridge, verify native service and real project queries/handoff. Download exact CI artifact, verify hash, publish build4+ with install instructions and honest phone gates.

@@ -36,4 +36,4 @@
 
 Codemagic 应用 ID 为 `6af2b0d8392f5c83a397ccfd`，归属于个人账号。私有仓库通过 Codemagic 生成的专用 SSH 密钥连接，GitHub Deploy key 标题为 `Codemagic Codex Remote read-only`，仅允许读取 `codex-ios`。需要停用访问时，可在 GitHub 仓库 Settings → Deploy keys 中删除该条密钥。Codemagic 保存私钥，本机不转交个人 GitHub PAT。
 
-首次使用通用仓库 URL 的构建在拉取代码前失败，未运行测试。补齐 SSH 连接后，[第二次构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2b1d26e6b1c8dfae0beb1)实际运行78项测试，其中76项通过；新建任务和最大字号用例失败，流程按预期阻止打包。[第三次构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2b86a52d3f7eced4ca037)通过77项，确认字号修复及过程操作有效；新建任务仍失败。当前按已确认的独立表单方案继续验证，最终结果见[会话验证记录](validation/conversation-experience.md)。
+首次使用通用仓库URL的构建在拉取代码前失败，未运行测试。补齐SSH连接后，审查前 `2114d7f` 的[成功构建](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af2cc88ac1033465782ed43)通过78项并生成已核验的历史IPA。审查修订后新增测试总数82，最近构建81项通过、审批UI一项失败，禁止交付旧IPA替代修订版本。当前 `ios-diagnose-approval` 工作流只采集失败用例调用栈，不打包；正常打包入口拒绝设置了测试筛选参数的运行。当前验证与手机安装状态见[会话验证记录](validation/conversation-experience.md)。
