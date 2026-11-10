@@ -72,11 +72,12 @@ final class ThreadUITests: XCTestCase {
         let draft = app.textViews["任务草稿"]
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
         draft.tap(); draft.typeText("controlled create")
-        let submit = app.buttons["创建并发送"]
+        let submit = app.navigationBars["新任务"].buttons["创建并发送"]
+        XCTAssertTrue(submit.exists, "Create must stay in the navigation bar while editing")
         let before = XCTAttachment(string: "enabled=\(submit.isEnabled), hittable=\(submit.isHittable)\n" + app.debugDescription)
         before.name = "create-before-tap"; before.lifetime = .keepAlways; add(before)
         XCTAssertTrue(submit.isEnabled)
-        app.buttons["创建并发送"].tap()
+        submit.tap()
         let opened = app.navigationBars["Created fixture task"].waitForExistence(timeout: 10)
         if !opened {
             let state = XCTAttachment(string: app.debugDescription)

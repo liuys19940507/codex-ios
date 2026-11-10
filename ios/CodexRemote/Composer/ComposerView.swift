@@ -50,10 +50,12 @@ struct ComposerView: View {
             if compact { compactComposer } else { formComposer }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                if !compact, projectID != nil {
+            if projectID != nil {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("创建并发送") { Task { await send() } }.disabled(!enabled)
                 }
+            }
+            ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("收起键盘") { editing = false }
             }
@@ -74,16 +76,16 @@ struct ComposerView: View {
                 } else if features["steer"] == true { Text("发送后追加到当前轮次。").font(.footnote).foregroundStyle(.secondary) }
                 if features["queue"] != true { Text("未发送的内容保留为草稿，不会自动排队。").font(.footnote).foregroundStyle(.secondary) }
             }
-            if !editing || projectID == nil {
-              Button {
-                Task { await send() }
-            } label: {
-                HStack {
-                    Text(projectID != nil ? "创建并发送" : running ? (chosenMode == .queue ? "加入队列" : "追加指令") : "发送指令")
-                    if sender.busy { Spacer(); ProgressView() }
-                }.frame(minHeight: 44)
-            }
-            .buttonStyle(.borderedProminent).disabled(!enabled)
+            if projectID == nil {
+                Button {
+                    Task { await send() }
+                } label: {
+                    HStack {
+                        Text(running ? (chosenMode == .queue ? "加入队列" : "追加指令") : "发送指令")
+                        if sender.busy { Spacer(); ProgressView() }
+                    }.frame(minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent).disabled(!enabled)
             }
             Text(model.storageMessage ?? model.message ?? "草稿保存在本机，尚未提交。")
                 .font(.footnote).foregroundStyle(.secondary)
