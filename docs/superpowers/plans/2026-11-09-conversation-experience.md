@@ -80,6 +80,15 @@
 - [ ] Add RED tests for commentary/final/no-phase messages, same item IDs across pagination, empty metadata, pending forms and child navigation; add UI checks and screenshot attachments.
 - [ ] Implement and verify tests/rendered simulator screenshots; update feature comparison and validation notes. Commit.
 
+### T5b: User-approved Codemagic migration
+
+**Files:** codemagic.yaml; scripts/ci/install-xcodegen.sh; scripts/ci/codemagic-ios.sh; scripts/ci/tests/codemagic-ios.test.sh; docs/codemagic-setup.md; .github/workflows/ios.yml.
+
+**Interfaces:** personal mac_mini_m2, Xcode26.3; one serial workflow runs existing simulator tests, requires actual passing xcresult summary, exports screenshots/results even on test failure, then builds the unsigned arm64 IPA with commit/hash. No Apple signing credentials. Retain existing private GitHub origin; GitHub iOS workflow becomes manual fallback. Manual Codemagic build initially avoids duplicate automatic runs. Installer persists XcodeGen PATH through CM_ENV or GITHUB_PATH.
+
+- [ ] RED local orchestration checks for failed/missing tests preventing packaging and retained diagnosis, then GREEN runner; validate YAML against official schema and shell syntax. Commit/push configuration.
+- [ ] Connect user personal Codemagic account/private repository, run exact candidate and inspect real logs/tests/screenshots/IPA. Login/repository access requires user browser or locally supplied API credential; no paid billing changes.
+
 ### T6: Verify, review and package
 
 - [ ] Run Windows tests/typecheck/Pester and fresh macOS iOS unit/UI/device checks for final source. One fresh final reviewer for this new phase, resolve Important/Critical with tests; no repeated baseline review.

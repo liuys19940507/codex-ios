@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://codemagic.io/codemagic-schema.json
+workflows:
+  ios-verify-package:
+    name: Codex Remote - test and unsigned IPA
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      xcode: "26.3"
+    cache:
+      cache_paths:
+        - build/SourcePackages
+    # Start manually or via the API while iterating; avoid duplicate builds.
+    scripts:
+      - name: Verify pipeline failure gates
+        script: bash scripts/ci/tests/codemagic-ios.test.sh
+      - name: Install pinned XcodeGen
+        script: bash scripts/ci/install-xcodegen.sh
+      - name: Test, retain diagnosis, then package
+        script: bash scripts/ci/codemagic-ios.sh
+    artifacts:
+      - build/CodexRemote-unsigned.ipa
+      - build/CodexRemote-unsigned.ipa.sha256
+      - build/commit.txt
+      - build/Package.resolved
+      - build/ios-test-summary.json
+      - build/ios-test.log
+      - build/ios-package.log
+      - build/CodexRemote-tests.zip
+      - build/ios-screenshots.zip

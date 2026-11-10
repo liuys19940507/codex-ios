@@ -1,12 +1,6 @@
-name: iOS
+name: iOS (manual fallback)
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'ios/**'
-      - 'scripts/ci/**'
-      - 'contracts/fixtures/**'
-      - '.github/workflows/ios.yml'
 permissions:
   contents: read
 concurrency:

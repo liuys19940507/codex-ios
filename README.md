@@ -10,6 +10,8 @@ Windows 桥接与原生 SwiftUI 客户端已实现。真实 iPhone 已接入 Pow
 
 参考 Android 的[本轮改进](docs/android-reference.md)增加多项目发现、会话刷新与释放、按轮次折叠处理过程、Markdown/代码与文件差异视图和底部输入框。[验证记录](docs/validation/conversation-experience.md)区分自动检查、实际 Windows 验证和待执行的手机覆盖安装。
 
+iOS 构建已准备迁到个人 Codemagic 的 M2 环境，先测试通过再生成未签名 IPA，接入与产物说明见 [Codemagic 构建](docs/codemagic-setup.md)。实际首次云端执行结果仍需验证。
+
 ## 方案方向
 
 - 原生 SwiftUI 客户端，最低 iOS16.0。
