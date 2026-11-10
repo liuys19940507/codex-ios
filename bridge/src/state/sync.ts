@@ -61,14 +61,21 @@ export class SyncService {
     return stored;
   }
   snapshot(threadId:string):Promise<Snapshot> {
-    if(this.ready.has(threadId))return Promise.resolve(this.store.snapshot(threadId));
-    const active=this.inflight.get(threadId);if(active)return active;
+    return this.prepare(threadId,false);
+  }
+  resumeForWrite(threadId:string):Promise<Snapshot> {
+    return this.prepare(threadId,true);
+  }
+  private prepare(threadId:string,forWrite:boolean):Promise<Snapshot> {
+    if(!forWrite&&this.ready.has(threadId))return Promise.resolve(this.store.snapshot(threadId));
+    const active=this.inflight.get(threadId);
+    if(active)return forWrite?active.then(()=>this.prepare(threadId,true)):active;
     this.buffers.set(threadId,[]);
-    const work=this.bootstrap(threadId).finally(()=>{this.inflight.delete(threadId);this.buffers.delete(threadId);});
+    const work=this.bootstrap(threadId,forWrite).finally(()=>{this.inflight.delete(threadId);this.buffers.delete(threadId);});
     this.inflight.set(threadId,work);return work;
   }
-  private async bootstrap(threadId:string):Promise<Snapshot> {
-    const loaded=object(await this.rpc.request('thread/loaded/list',{}));
+  private async bootstrap(threadId:string,forWrite:boolean):Promise<Snapshot> {
+    const loaded=forWrite?{data:[threadId]}:object(await this.rpc.request('thread/loaded/list',{}));
     const isLoaded=Array.isArray(loaded.data)&&loaded.data.includes(threadId);
     const apply=(value:Json)=>{
       const snap=this.install(value);

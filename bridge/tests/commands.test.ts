@@ -16,9 +16,10 @@ import { fakeServer, handshake } from './support/fake-server.js';
 import type { Command } from '../src/api/contracts.js';
 
 const command=(method:Command['method'],params:Command['params']):Command=>({id:randomUUID(),method,params});
-async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolean}={}) {
+async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolean;streamStart?:boolean}={}) {
   const dir=await mkdtemp(join(tmpdir(),'codex-command-')),projects=[{id:'project',name:'Controlled',path:'C:/controlled/project'}];
   const active=options.active??true;
+  let loaded=active;
   const thread={id:'thread',cwd:projects[0]!.path,name:'Controlled',status:{type:active?'active':'idle'},turns:active?[{id:'turn',status:'inProgress',items:[]}]:[]};
   const calls:{method:string;params:any}[]=[],responses:{id:unknown;result:unknown}[]=[];
   let emit:(message:unknown)=>void=()=>{throw new Error('No socket');};
@@ -32,7 +33,8 @@ async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolea
     calls.push({method:m.method!,params:m.params});
     const p=m.params as any;
     if(options.dropCreate&&m.method==='turn/start'){socket.terminate();return;}
-    const result=m.method==='thread/loaded/list'?{data:active?['thread']:[]}:
+    if(m.method==='thread/resume')loaded=true;
+    const result=m.method==='thread/loaded/list'?{data:loaded?['thread']:[]}:
       m.method==='thread/read'?{thread}:
       m.method==='thread/resume'?{thread,initialTurnsPage:{data:thread.turns},approvalPolicy:'on-request',sandbox:{type:'readOnly'}}:
       m.method==='thread/start'?{thread:{...thread,id:'created'}}:
@@ -40,6 +42,10 @@ async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolea
       m.method==='turn/steer'?{turnId:p.expectedTurnId}:
       m.method==='model/list'?{data:[{model:'supported',displayName:'Supported',supportedReasoningEfforts:[{reasoningEffort:'medium'}]}]}:{};
     socket.send(JSON.stringify({id:m.id,result}));
+    if(options.streamStart&&m.method==='turn/start') {
+      socket.send(JSON.stringify({method:'turn/started',params:{threadId:'thread',turn:{id:'new-turn',status:'inProgress',items:[]}}}));
+      socket.send(JSON.stringify({method:'item/agentMessage/delta',params:{threadId:'thread',turnId:'new-turn',itemId:'live-first',delta:'live first output'}}));
+    }
   });
   const rpc=await connectRpc(server.url,'test'),store=openStore(join(dir,'state.sqlite')),sync=createSync(store,rpc);
   const operations=createOperations(store),queries=createQueries({rpc,store,sync,projects});
@@ -105,6 +111,16 @@ test('history_is_resumed_only_when_user_explicitly_sends_input',async t=>{
   assert.equal(result.state,'accepted');assert.equal(f.calls.filter(c=>c.method==='thread/resume').length,1);
   const resumed=f.calls.find(c=>c.method==='thread/resume')!.params;
   assert.equal('approvalPolicy' in resumed,false);assert.equal('sandbox' in resumed,false);
+});
+
+test('explicit_history_input_activates_subscription_before_start_without_a_client_refresh',async t=>{
+  const f=await fixture(t,{active:false,streamStart:true});
+  const result=await f.commands.dispatch(command('task/input',{threadId:'thread',text:'continue',mode:'start'}));
+  assert.equal(result.state,'accepted');
+  for(const end=Date.now()+500;Date.now()<end&&f.store.snapshot('thread').thread.activeTurnId!=='new-turn';)await delay(5);
+  assert.equal(f.store.snapshot('thread').thread.activeTurnId,'new-turn');
+  assert.equal(f.store.snapshot('thread').items.find(item=>item.id==='live-first')?.text,'live first output');
+  assert.equal(f.calls.filter(c=>c.method==='thread/resume').length,1);
 });
 
 test('create_partial_failure_keeps_created_thread_without_creating_another',async t=>{

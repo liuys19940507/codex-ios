@@ -58,13 +58,8 @@ export function createCommands(context:Context) {
       if(command.method==='task/input') {
         if(p.mode==='steer')return rpc.request('turn/steer',{threadId,expectedTurnId:p.expectedTurnId!,input:input(p.text)});
         if(p.mode==='queue')throw new ApiError(409,'capability_unavailable','Queue adapter is not validated');
-        const resumed=object(await rpc.request('thread/resume',{threadId,excludeTurns:true}));
-        if(object(resumed.thread).status?.type==='active')conflict('Another client has started a turn; refresh before sending');
-        if(store.has(threadId)) {
-          const current=store.snapshot(threadId);
-          current.policy={approvalPolicy:typeof resumed.approvalPolicy==='string'?resumed.approvalPolicy:null,sandbox:typeof object(resumed.sandbox).type==='string'?resumed.sandbox.type:null};
-          store.atomic(()=>store.putSnapshot(current));
-        }
+        const resumed=await sync.resumeForWrite(threadId);
+        if(resumed.thread.activeTurnId||resumed.thread.status==='active')conflict('Another client has started a turn; refresh before sending');
         const response=object(await rpc.request('turn/start',{threadId,input:input(p.text)}));
         return {threadId,turnId:String(object(response.turn).id)};
       }
