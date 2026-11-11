@@ -21,6 +21,7 @@ import type { Envelope } from './api/contracts.js';
 interface Dependencies {
   addresses(): string[];
   secure(path: string): Promise<void>;
+  secureUploads?(path:string,stateDir:string):Promise<void>;
   ensureService(config: RuntimeConfig): Promise<ServiceInfo>;
 }
 const defaults: Dependencies = {
@@ -28,6 +29,10 @@ const defaults: Dependencies = {
   secure: async path => {
     const script = fileURLToPath(new URL('../../scripts/windows/Protect-CodexRemotePath.ps1', import.meta.url));
     await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', script, '-Path', path], { windowsHide: true, timeout: 15000 });
+  },
+  secureUploads:async (path,stateDir)=>{
+    const script=fileURLToPath(new URL('../../scripts/windows/Allow-CodexRemoteUploadRead.ps1',import.meta.url));
+    await promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-File',script,'-Path',path,'-StateDir',stateDir],{windowsHide:true,timeout:15000});
   },
   ensureService,
 };
@@ -57,6 +62,8 @@ export async function startBridge(config: RuntimeConfig, dependencies: Dependenc
   // Real control probe passed on 0.167.0. Other request-generation paths stay
   // disabled until independently exercised against the native server.
   const uploads=createAttachmentStore(join(config.stateDir,'uploads'));
+  await mkdir(join(config.stateDir,'uploads'),{recursive:true});
+  await dependencies.secureUploads?.(join(config.stateDir,'uploads'),config.stateDir);
   const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: true, permissions: false, questions: true, mcp: false, threadMetadata: true, attachments: true };
   const api = createApiServer({ token, info: { apiVersion: 1, serverId, codexVersion: '0.167.0', features }, available: () => available,
     queries: {

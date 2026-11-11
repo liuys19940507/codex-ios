@@ -17,6 +17,8 @@ The user requested the Android reference's input features in the current iOS app
 
 Use at most10 attachments per submission, each at most20MiB. Import bounded data into Application Support; retain server files so historical references continue to work. Enforce limits before sending and at the authenticated server. No new third-party libraries or signing entitlements. No push-notification or renewal-schedule changes.
 
+Actual Windows native probing found that the private state folder's owner-only ACL prevents CodexSandboxUsers from reading ordinary uploaded files, while image decoding in the parent process succeeds. Grant that local sandbox group read/execute only to the uploads child, with inherited access for attachment contents; preserve the state parent's owner-only ACL. Validate the exact state/uploads path and reject reparse targets. Do not switch user tasks to full access or weaken token-file permissions.
+
 The pinned native schema has images and text but no general file input part. Uploaded images use native localImage, HTTP(S) images use native image, and ordinary files are saved on Windows with explicit filename/path references in the text input so Codex can read them with its existing tools. Do not claim native PDF/Word binary ingestion or execute uploaded files in the bridge.
 
 ## Contracts and boundaries
