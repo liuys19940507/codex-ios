@@ -5,8 +5,8 @@ final class LaunchTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-workspace"]
         app.launch()
-        XCTAssertTrue(app.tabBars.buttons["连接"].waitForExistence(timeout: 10))
-        app.tabBars.buttons["连接"].tap()
+        XCTAssertTrue(app.buttons["更多"].waitForExistence(timeout: 10))
+        app.buttons["更多"].tap(); app.buttons["连接"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Windows"].waitForExistence(timeout: 5))
         app.staticTexts["Fixture Windows"].press(forDuration: 1)
         app.buttons["删除连接"].tap()
