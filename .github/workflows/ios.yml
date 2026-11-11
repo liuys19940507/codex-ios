@@ -43,6 +43,7 @@ jobs:
             build/ios-test-summary.json
             build/CodexRemote-tests.zip
             build/ios-screenshots.zip
+            build/approval-diagnostics.zip
           if-no-files-found: warn
           retention-days: 7
       - name: Keep verified device IPA

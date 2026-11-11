@@ -8,6 +8,10 @@ if [[ "$test_filter" == CodexRemoteUITests/ThreadUITests/testCommandApprovalIsAc
     python3 scripts/ci/sample-approval.py build/approval-diagnostics > build/approval-diagnostics/sampler.log 2>&1 &
     monitor_pid=$!
 fi
+if [[ "$test_filter" == CodexRemoteUITests/ThreadUITests/testLongActivityCanCopyAndChildNavigationPreservesParentDraft ]]; then
+    python3 scripts/ci/sample-approval.py build/approval-diagnostics UICTContentSizeCategoryAccessibilityXXXL > build/approval-diagnostics/sampler.log 2>&1 &
+    monitor_pid=$!
+fi
 cleanup() {
     if [[ -n "$monitor_pid" ]]; then
         kill "$monitor_pid" >/dev/null 2>&1 || true
