@@ -85,6 +85,10 @@ final class CommandSender: ObservableObject {
     }
 
     func canSubmit(_ method: Command.Method) -> Bool { !unreadable && canSend(method) }
+    func uploadAttachment(_ upload: AttachmentUpload, method: Command.Method) async throws -> UploadedAttachment {
+        guard canSubmit(method) else { throw ClientCommandError(message: "请先连接服务并完成同步，再发送附件。") }
+        return try await transport.uploadAttachment(upload)
+    }
     func blocked(method: Command.Method, params: [String: JSONValue]) -> Operation? {
         unresolved.last(where: { $0.context == Self.context(method, params) })?.receipt
     }
@@ -172,13 +176,20 @@ final class CommandSender: ObservableObject {
 
 enum InputMode: String, Sendable { case start, steer, queue }
 enum CommandParameters {
-    static func text(_ value: String) throws {
-        if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw ClientCommandError(message: "请输入指令。") }
+    static func text(_ value: String, hasAttachments: Bool = false) throws {
+        if !hasAttachments && value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw ClientCommandError(message: "请输入指令或添加附件。") }
         if value.utf8.count > 65536 { throw ClientCommandError(message: "单次输入最多64 KiB，请缩短内容。草稿已保留。") }
     }
-    static func input(text: String, snapshot: Snapshot, mode: InputMode, features: [String: Bool]) throws -> [String: JSONValue] {
-        try self.text(text)
+    static func input(text: String, snapshot: Snapshot, mode: InputMode, features: [String: Bool], attachmentIDs: [String] = []) throws -> [String: JSONValue] {
+        try self.text(text, hasAttachments: !attachmentIDs.isEmpty)
         var params: [String: JSONValue] = ["threadId": .string(snapshot.thread.id), "text": .string(text), "mode": .string(mode.rawValue)]
+        if !attachmentIDs.isEmpty {
+            guard features["attachments"] == true, attachmentIDs.count <= AttachmentLimits.count,
+                  attachmentIDs.allSatisfy({ UUID(uuidString: $0) != nil }), Set(attachmentIDs.map { $0.lowercased() }).count == attachmentIDs.count else {
+                throw ClientCommandError(message: "当前服务不支持这些附件，请更新服务后重试。")
+            }
+            params["attachments"] = .array(attachmentIDs.map { .string($0.lowercased()) })
+        }
         if mode == .queue && features["queue"] != true { throw ClientCommandError(message: "服务不支持排队，内容已保留为草稿。") }
         if mode == .steer {
             guard features["steer"] == true, let turnID = snapshot.thread.activeTurnId else { throw ClientCommandError(message: "当前轮次不可追加指令，请刷新。") }

@@ -52,6 +52,12 @@ actor URLSessionTransport: BridgeTransport {
         try await send(Self.makeRequest(server: server, token: token, path: "/v1/commands",
                                         method: "POST", body: JSONEncoder().encode(command)), as: Operation.self)
     }
+    func uploadAttachment(_ upload: AttachmentUpload) async throws -> UploadedAttachment {
+        var request = try Self.makeRequest(server: server, token: token, path: "/v1/attachments",
+                                          method: "POST", body: JSONEncoder().encode(upload))
+        request.timeoutInterval = 120
+        return try await send(request, as: UploadedAttachment.self)
+    }
 
     private func send<T: Decodable>(_ request: URLRequest, as: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
