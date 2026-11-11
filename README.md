@@ -10,6 +10,8 @@ Windows 桥接与原生 SwiftUI 客户端已实现。真实 iPhone 已接入 Pow
 
 参考 Android 的[本轮改进](docs/android-reference.md)增加多项目发现、会话刷新与释放、按轮次折叠处理过程、Markdown/代码与文件差异视图和底部输入框。[验证记录](docs/validation/conversation-experience.md)区分自动检查、实际 Windows 验证和待执行的手机覆盖安装。
 
+任务、连接、设置已改为右上角“…”菜单，腾出底部阅读空间。历史分页按实际剩余记录结束，并显示每次新增数量；本轮状态见[历史与导航验证](docs/validation/history-overflow-menu.md)。
+
 iOS 构建使用 GitHub Actions 的标准 macOS 环境，运行 iOS 模拟器单元/UI 测试并保留截图；全部通过后才生成未签名 arm64 IPA。操作与产物说明见 [GitHub Actions 构建](docs/github-actions-ios.md)，[Codemagic 配置](docs/codemagic-setup.md)保留为备用。
 
 输入支持系统文本复制粘贴、图片/文件粘贴、照片与文件选择，以及图片地址。附件随草稿保存在手机，点击发送后上传；失败或结果未知时保留。每个附件最多20MiB，一次最多10个，普通文件通过 Windows 保存路径供 Codex 的现有工具读取。设备验证状态见[附件验证记录](docs/validation/composer-attachments.md)。
