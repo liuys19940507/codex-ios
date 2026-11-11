@@ -95,6 +95,7 @@ final class AttachmentTests: XCTestCase {
         let f = fixture(behavior: .heldCommand)
         f.model.text = "first"
         try await f.model.importData(Data([1]), name: "first.txt", kind: .file)
+        let submittedFile = try XCTUnwrap(f.model.previewURL(XCTUnwrap(f.model.attachments.first)))
         let sending = Task { await f.model.submitInput(using: f.sender, snapshot: snapshot(), mode: .start, features: ["attachments": true]) }
         let posted = await f.transport.waitForCommand(); XCTAssertTrue(posted)
         f.model.text = "later 中文😀"
@@ -102,6 +103,8 @@ final class AttachmentTests: XCTestCase {
         await f.transport.releaseCommand(); _ = await sending.value
         XCTAssertEqual(f.model.text, "later 中文😀")
         XCTAssertEqual(f.model.attachments.map(\.name), ["later.txt"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: submittedFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(f.model.previewURL(XCTUnwrap(f.model.attachments.first))).path))
     }
 
     @MainActor
@@ -163,12 +166,86 @@ final class AttachmentTests: XCTestCase {
     }
 
     @MainActor
+    func testOversizedProviderFilesAndImagesNeverFallBackToWholeDataLoading() async throws {
+        let f = fixture(), file = f.root.appendingPathComponent("oversized.bin")
+        try FileManager.default.createDirectory(at: f.root, withIntermediateDirectories: true)
+        try Data([1]).write(to: file)
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: UInt64(AttachmentLimits.bytes + 1)); try handle.close()
+        for type in [UTType.pdf.identifier, UTType.png.identifier] {
+            let provider = BoundedAttachmentProvider(file: file, type: type)
+            await AttachmentMediaImport.add([provider], to: f.model)
+            XCTAssertEqual(provider.fileLoads, 1)
+            XCTAssertEqual(provider.dataLoads, 0, "A rejected bounded read must not load the entire provider payload")
+            XCTAssertTrue(f.model.attachments.isEmpty)
+            XCTAssertTrue(f.model.message?.contains("20MB") == true)
+        }
+    }
+
+    @MainActor
+    func testRemovedAndAcceptedAttachmentsReclaimPhoneBytesButFailedDraftsKeepThem() async throws {
+        for behavior in [AttachmentTransport.Behavior.accepted, .failed, .unknown] {
+            let f = fixture(behavior: behavior)
+            try await f.model.importData(Data([1]), name: "cleanup.txt", kind: .file)
+            let file = try XCTUnwrap(f.model.previewURL(XCTUnwrap(f.model.attachments.first)))
+            _ = await f.model.submitCreate(using: f.sender, projectID: "project", features: ["attachments": true])
+            XCTAssertEqual(FileManager.default.fileExists(atPath: file.path), behavior != .accepted)
+            if behavior != .accepted {
+                try f.model.removeAttachment(try XCTUnwrap(f.model.attachments.first).id)
+                XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+            }
+        }
+    }
+
+    @MainActor
+    func testFailedManifestAppendDoesNotOrphanANewPhoneBlob() async throws {
+        let f = fixture(), drafts = DraftStore(root: f.root.appendingPathComponent("drafts"))
+        let stale = ComposerModel(serverID: f.server, threadID: "thread", drafts: drafts)
+        for index in 0..<10 { try await f.model.importData(Data([1]), name: "\(index).txt", kind: .file) }
+        let directory = f.root.appendingPathComponent("drafts/attachments/\(f.server.uuidString)/files")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count, 10)
+        do { try await stale.importData(Data([2]), name: "rejected.txt", kind: .file); XCTFail("Stale model bypassed the manifest count") } catch { }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count, 10)
+        XCTAssertEqual(ComposerModel(serverID: f.server, threadID: "thread", drafts: drafts).attachments.count, 10)
+    }
+
+    @MainActor
+    func testRemovingDuringAnUploadKeepsItsBytesUntilSubmissionFinishes() async throws {
+        let f = fixture(behavior: .heldUpload), drafts = DraftStore(root: f.root.appendingPathComponent("drafts"))
+        try await f.model.importData(Data([1]), name: "held.txt", kind: .file)
+        let item = try XCTUnwrap(f.model.attachments.first), file = try XCTUnwrap(f.model.previewURL(item))
+        let sending = Task { await f.model.submitInput(using: f.sender, snapshot: snapshot(), mode: .start, features: ["attachments": true]) }
+        let uploading = await f.transport.waitForUpload(); XCTAssertTrue(uploading)
+        let secondView = ComposerModel(serverID: f.server, threadID: "thread", drafts: drafts)
+        try secondView.removeAttachment(item.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "An active upload owns a temporary read lease")
+        await f.transport.releaseUpload(); _ = await sending.value
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @MainActor
     private func fixture(behavior: AttachmentTransport.Behavior = .accepted) -> (root: URL, server: UUID, model: ComposerModel, transport: AttachmentTransport, sender: CommandSender) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), server = UUID()
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
         let drafts = DraftStore(root: root.appendingPathComponent("drafts")), transport = AttachmentTransport(behavior: behavior)
         return (root, server, ComposerModel(serverID: server, threadID: "thread", drafts: drafts), transport,
                 CommandSender(serverID: server, transport: transport, journal: OperationJournal(root: root.appendingPathComponent("operations"))))
+    }
+}
+
+private final class BoundedAttachmentProvider: NSItemProvider, @unchecked Sendable {
+    let file: URL
+    private(set) var fileLoads = 0
+    private(set) var dataLoads = 0
+    init(file: URL, type: String) {
+        self.file = file; super.init()
+        registerDataRepresentation(forTypeIdentifier: type, visibility: .all) { completion in completion(Data([1]), nil); return nil }
+    }
+    override func loadFileRepresentation(forTypeIdentifier typeIdentifier: String, completionHandler: @escaping (URL?, Error?) -> Void) -> Progress {
+        fileLoads += 1; completionHandler(file, nil); return Progress(totalUnitCount: 1)
+    }
+    override func loadDataRepresentation(forTypeIdentifier typeIdentifier: String, completionHandler: @escaping (Data?, Error?) -> Void) -> Progress {
+        dataLoads += 1; completionHandler(Data([1]), nil); return Progress(totalUnitCount: 1)
     }
 }
 
