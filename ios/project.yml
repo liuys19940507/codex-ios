@@ -9,7 +9,7 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: '16.0'
     CODE_SIGNING_ALLOWED: NO
     MARKETING_VERSION: '0.1.0'
-    CURRENT_PROJECT_VERSION: '4'
+    CURRENT_PROJECT_VERSION: '5'
 packages:
   CMark:
     url: https://github.com/swiftlang/swift-cmark

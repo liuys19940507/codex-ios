@@ -10,7 +10,6 @@ struct ComposerView: View {
     var snapshot: Snapshot? = nil
     var features: [String: Bool] = [:]
     @State private var mode: InputMode = .steer
-    @State private var editorWidth: CGFloat = 0
     @ScaledMetric(relativeTo: .body) private var editorFontSize: CGFloat = 17
     @FocusState private var editing: Bool
     private var running: Bool { snapshot?.thread.activeTurnId != nil || snapshot?.thread.status == "active" }
@@ -29,14 +28,9 @@ struct ComposerView: View {
         return !running || (chosenMode == .steer ? features["steer"] == true : features["queue"] == true)
     }
     private var editorHeight: CGFloat {
-        let font = UIFont.systemFont(ofSize: editorFontSize)
-        // UITextView has 5pt line-fragment padding on both sides and 8pt
-        // vertical insets. Measure width only, avoiding a height feedback loop.
-        let width = max(1, editorWidth - 10)
-        let value = String(model.text.prefix(4096)) + "\u{200B}"
-        let bounds = (value as NSString).boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil)
-        return min(160, max(56, ceil(max(font.lineHeight, bounds.height) + 20)))
+        // Keep typing inside a scrolling editor while allowing a complete
+        // line at the user's preferred text size.
+        max(56, ceil(UIFont.systemFont(ofSize: editorFontSize).lineHeight + 20))
     }
     var body: some View {
         compactComposer
@@ -52,11 +46,9 @@ struct ComposerView: View {
             HStack(alignment: .bottom, spacing: 8) {
                 TextEditor(text: $model.text).font(.system(size: editorFontSize)).scrollContentBackground(.hidden)
                     .frame(height: editorHeight)
-                    .background(GeometryReader { value in Color.clear.preference(key: ComposerWidthKey.self, value: value.size.width) })
                     .padding(4)
                     .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                     .accessibilityIdentifier("任务草稿").accessibilityLabel("任务草稿").disabled(!model.writable).focused($editing)
-                    .onPreferenceChange(ComposerWidthKey.self) { if $0 > 0, abs($0 - editorWidth) > 0.5 { editorWidth = $0 } }
                 Button { Task { await send() } } label: {
                     Group { if sender.busy { ProgressView() } else { Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)) } }.frame(width: 28, height: 32)
                 }.buttonStyle(.borderedProminent).disabled(!enabled)
@@ -82,11 +74,6 @@ struct ComposerView: View {
             if result?.state == .accepted && session.snapshot?.thread.id == snapshot.thread.id { await session.selectThread(snapshot.thread.id) }
         }
     }
-}
-
-private struct ComposerWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 @MainActor
