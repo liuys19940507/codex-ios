@@ -6,7 +6,7 @@
 
 完整构建先运行所有单元/UI 测试，校验 xcresult 的实际结果和数量，全部通过后再归档 Release arm64 真机 IPA。下载页面中的两份产物：
 
-- `ios-results-提交号`：测试统计、完整 xcresult、UI 截图和测试录屏。
+- `ios-results-提交号`：测试统计、完整 xcresult、UI 截图及 Xcode 实际保留的录屏等附件。
 - `CodexRemote-unsigned-提交号`：IPA、SHA256、对应提交号、完整依赖锁和测试统计。
 
 产物保留7天。截图用于检查实际模拟器画面；这是自动测试记录，不能在 Actions 页面直接交互操作模拟器。完整 xcresult 可在 macOS 的 Xcode 中进一步检查。
