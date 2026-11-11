@@ -130,7 +130,10 @@ export function createQueries(context:QueryContext) {
       store.atomic(()=>store.putSnapshot(merged));
     }
     const current=store.snapshot(threadId);
-    return {data:[],nextCursor:historyCursor(current,[],current.itemsCursor)};
+    const index=value.anchor===null?current.items.length:current.items.findIndex(item=>item.id===value.anchor);
+    if(index<0)throw new ApiError(409,'resync_required','History anchor is no longer available');
+    const items=current.items.slice(0,index);
+    return {data:items.slice(-50),nextCursor:historyCursor(current,items,current.itemsCursor)};
   }
   async function queryModels():Promise<{id:string;name:string;reasoning:string[]}[]> {
     const models:{id:string;name:string;reasoning:string[]}[]=[];let cursor:string|null=null;

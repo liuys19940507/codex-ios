@@ -9,8 +9,9 @@ import {openStore} from '../src/state/store.js';
 import {createSync} from '../src/state/sync.js';
 import {connectRpc} from '../src/protocol/rpc-client.js';
 import {fakeServer,handshake} from './support/fake-server.js';
+import {setTimeout as delay} from 'node:timers/promises';
 
-async function fixture(t:TestContext,options:{complete?:boolean;empty?:boolean;repeat?:boolean}={}){
+async function fixture(t:TestContext,options:{complete?:boolean;empty?:boolean;repeat?:boolean;emptyCount?:number;nonterminal?:boolean;hold?:boolean}={}){
  const directory=await mkdtemp(join(tmpdir(),'codex-history-'));
  const project={id:'project',name:'Controlled',path:'C:/controlled/project'};
  const items=(prefix:string,count:number)=>Array.from({length:count},(_,i)=>({id:`${prefix}-${i}`,type:'agentMessage',text:`${prefix} ${i}`}));
@@ -19,6 +20,7 @@ async function fixture(t:TestContext,options:{complete?:boolean;empty?:boolean;r
  const thread={id:'thread',cwd:project.path,name:'Controlled',preview:'',status:{type:'idle'},parentThreadId:null,turns:[]};
  const calls:{method:string;params:any}[]=[];
  let beforeOlder:(()=>void)|undefined;
+ const held:{socket:{send(data:string):void};id:unknown;result:unknown}[]=[];
  const server=await fakeServer((socket,m)=>{
   if(handshake(socket,m)||m.method==='initialized')return;
   const p=m.params as any;calls.push({method:m.method!,params:p});
@@ -31,6 +33,13 @@ async function fixture(t:TestContext,options:{complete?:boolean;empty?:boolean;r
    result=options.repeat?{data:[],nextCursor:p.cursor}:
     options.empty&&p.cursor==='turns-before-recent'?{data:[{id:'empty',status:'completed',items:[]}],nextCursor:'turns-before-empty'}:
     {data:[older],nextCursor:null};
+   if(options.emptyCount!==undefined){
+    const index=calls.filter(c=>c.method==='thread/turns/list').length-1;
+    result=index<options.emptyCount?{data:[],nextCursor:`empty-${index+1}`}:
+     p.cursor==='after-older'?{data:[{id:'oldest',status:'completed',items:items('oldest',1)}],nextCursor:null}:
+     {data:[older],nextCursor:options.nonterminal?'after-older':null};
+   }
+   if(options.hold){held.push({socket,id:m.id,result});return;}
   }
   if(m.method==='thread/items/list')result={data:recent.items.slice(-50).reverse().map(item=>({turnId:'recent',item,completedAtMs:1})),nextCursor:'items-replay'};
   socket.send(JSON.stringify({id:m.id,result}));
@@ -38,7 +47,9 @@ async function fixture(t:TestContext,options:{complete?:boolean;empty?:boolean;r
  const rpc=await connectRpc(server.url,'test'),store=openStore(join(directory,'state.sqlite')),sync=createSync(store,rpc);
  t.after(async()=>{sync.close();await rpc.close();await server.close();store.close();assert.equal(dirname(resolve(directory)),resolve(tmpdir()));assert.ok(basename(directory).startsWith('codex-history-'));await rm(directory,{recursive:true,force:true});});
  const queries=createQueries({rpc,store,sync,projects:[project]});
- return {queries,store,calls,beforeOlder:(action:()=>void)=>{beforeOlder=action;}};
+ return {queries,store,calls,beforeOlder:(action:()=>void)=>{beforeOlder=action;},
+  waitForOlder:async(count:number)=>{const until=Date.now()+3000;while(held.length<count&&Date.now()<until)await delay(5);assert.equal(held.length,count);},
+  releaseOlder:(index:number)=>{const pending=held[index];assert.ok(pending);pending.socket.send(JSON.stringify({id:pending.id,result:pending.result}));}};
 }
 
 test('complete_initial_turns_page_does_not_replay_item_hydration_cursor',async t=>{
@@ -99,4 +110,32 @@ test('history_response_from_a_previous_epoch_cannot_extend_the_new_cache',async 
  f.beforeOlder(()=>f.store.resetEpoch());
  await assert.rejects(f.queries.queryItems('thread',local.nextCursor!),(e:unknown)=>e instanceof ApiError&&e.code==='resync_required');
  assert.equal(f.store.snapshot('thread').items.length,75);
+});
+
+test('nonempty_twentieth_native_page_is_delivered_with_terminal_or_continuing_boundary',async t=>{
+ for(const nonterminal of [false,true]){
+  const f=await fixture(t,{emptyCount:19,nonterminal}),snapshot=await f.queries.querySnapshot('thread');
+  const local=await f.queries.queryItems('thread',snapshot.itemsCursor!);
+  const page=await f.queries.queryItems('thread',local.nextCursor!);
+  assert.equal(page.data.length,50);assert.equal(page.data[0]?.id,'older-25');assert.ok(page.nextCursor);
+  const remainder=await f.queries.queryItems('thread',page.nextCursor!);
+  assert.equal(remainder.data.length,25);assert.equal(remainder.data[0]?.id,'older-0');
+  if(nonterminal){
+   assert.ok(remainder.nextCursor);const last=await f.queries.queryItems('thread',remainder.nextCursor!);
+   assert.deepEqual(last.data.map(i=>i.id),['oldest-0']);assert.equal(last.nextCursor,null);
+  }else assert.equal(remainder.nextCursor,null);
+ }
+});
+
+test('overlapping_readers_completing_in_reverse_order_keep_live_values_and_a_single_history_copy',async t=>{
+ const f=await fixture(t,{hold:true}),snapshot=await f.queries.querySnapshot('thread');
+ const local=await f.queries.queryItems('thread',snapshot.itemsCursor!);
+ const first=f.queries.queryItems('thread',local.nextCursor!);await f.waitForOlder(1);
+ const second=f.queries.queryItems('thread',local.nextCursor!);await f.waitForOlder(2);
+ f.releaseOlder(1);const b=await second;
+ const live=f.store.snapshot('thread');live.items.at(-1)!.text='live after second reader';f.store.atomic(()=>f.store.putSnapshot(live));
+ f.releaseOlder(0);const a=await first;
+ assert.deepEqual(a,b);assert.equal(a.data.length,50);
+ const current=f.store.snapshot('thread');assert.equal(current.items.length,150);assert.equal(new Set(current.items.map(i=>i.id)).size,150);
+ assert.equal(current.items.at(-1)!.text,'live after second reader');assert.equal(current.itemsCursor,null);
 });
