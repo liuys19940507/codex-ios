@@ -92,3 +92,11 @@ test('repeated_native_history_cursor_is_rejected_instead_of_looping',async t=>{
  const local=await f.queries.queryItems('thread',snapshot.itemsCursor!);
  await assert.rejects(f.queries.queryItems('thread',local.nextCursor!),(e:unknown)=>e instanceof ApiError&&e.code==='upstream_invalid');
 });
+
+test('history_response_from_a_previous_epoch_cannot_extend_the_new_cache',async t=>{
+ const f=await fixture(t),snapshot=await f.queries.querySnapshot('thread');
+ const local=await f.queries.queryItems('thread',snapshot.itemsCursor!);
+ f.beforeOlder(()=>f.store.resetEpoch());
+ await assert.rejects(f.queries.queryItems('thread',local.nextCursor!),(e:unknown)=>e instanceof ApiError&&e.code==='resync_required');
+ assert.equal(f.store.snapshot('thread').items.length,75);
+});

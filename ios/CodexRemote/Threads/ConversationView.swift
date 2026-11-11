@@ -27,10 +27,14 @@ struct ConversationView: View {
                         if let reason = snapshot.readOnlyReason { Label(reason, systemImage: "desktopcomputer").font(.callout).foregroundStyle(.secondary) }
                         if snapshot.itemsCursor != nil {
                             Button {
-                                let anchor = ConversationTimeline.make(snapshot.items).first?.id
+                                let previous = ConversationTimeline.make(snapshot.items)
+                                let known = Set(previous.map(\.id)), anchor = previous.first?.id
+                                followingLatest = false
                                 Task {
                                     await session.loadMoreHistory(); await Task.yield()
-                                    if let anchor { proxy.scrollTo(anchor, anchor: .top) }
+                                    guard !followingLatest, let current = session.snapshot, current.thread.id == threadID else { return }
+                                    let earlier = ConversationTimeline.make(current.items).first { !known.contains($0.id) }?.id
+                                    if let target = earlier ?? anchor { proxy.scrollTo(target, anchor: .top) }
                                 }
                             } label: { HStack { Text("加载较早记录"); if session.historyLoading { ProgressView() } } }
                             .disabled(session.historyLoading)

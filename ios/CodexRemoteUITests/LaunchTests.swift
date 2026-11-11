@@ -6,7 +6,7 @@ final class LaunchTests: XCTestCase {
         app.launchArguments = ["--ui-test-workspace"]
         app.launch()
         XCTAssertTrue(app.buttons["更多"].waitForExistence(timeout: 10))
-        app.buttons["更多"].tap(); app.buttons["连接"].tap()
+        app.buttons["更多"].tap(); app.buttons["workspace.connections"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Windows"].waitForExistence(timeout: 5))
         app.staticTexts["Fixture Windows"].press(forDuration: 1)
         app.buttons["删除连接"].tap()
@@ -14,7 +14,7 @@ final class LaunchTests: XCTestCase {
         app.buttons["确认删除"].tap()
         XCTAssertTrue(app.buttons["添加连接"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Fixture Windows"].exists)
-        XCTAssertFalse(app.tabBars.buttons["任务"].exists)
+        XCTAssertFalse(app.buttons["更多"].exists)
     }
     func testConnectAndEditHaveIndependentTapTargets() {
         let app = XCUIApplication()

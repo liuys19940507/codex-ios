@@ -87,6 +87,7 @@ export function createQueries(context:QueryContext) {
     if(value.kind!=='upstream'||typeof value.cursor!=='string')throw new ApiError(400,'invalid_cursor','Invalid item cursor');
     if(decodeTurnsBoundary(value.cursor)!==null)return olderTurns(threadId,value);
     const response=object(await rpc.request('thread/items/list',{threadId,cursor:value.cursor,limit:50,sortDirection:'desc'}));
+    if(store.cursor().epoch!==value.epoch)throw new ApiError(409,'resync_required','History changed; reload the snapshot');
     const data=(Array.isArray(response.data)?response.data:[]).map(raw=>{
       const entry=object(raw),item=object(entry.item);
       return projectItem(item,String(entry.turnId),entry.completedAtMs!=null||item.completedAtMs!=null||['completed','failed','declined'].includes(String(item.status)));
@@ -97,6 +98,7 @@ export function createQueries(context:QueryContext) {
     if(value.anchor!==null&&typeof value.anchor!=='string')throw new ApiError(400,'invalid_cursor','Missing history anchor');
     for(let attempt=0;attempt<20;attempt++) {
       const current=store.snapshot(threadId);
+      if(current.cursor.epoch!==value.epoch)throw new ApiError(409,'resync_required','History changed; reload the snapshot');
       const index=value.anchor===null?current.items.length:current.items.findIndex(item=>item.id===value.anchor);
       if(index<0)throw new ApiError(409,'resync_required','History anchor is no longer available');
       if(index>0) {
@@ -121,6 +123,7 @@ export function createQueries(context:QueryContext) {
       }
       // Read again after RPC: live deltas/metadata may have changed the cache.
       const fresh=store.snapshot(threadId),known=new Set(fresh.items.map(item=>item.id));
+      if(fresh.cursor.epoch!==value.epoch)throw new ApiError(409,'resync_required','History changed; reload the snapshot');
       const added=new Map(fetched.filter(item=>!known.has(item.id)).map(item=>[item.id,item]));
       const merged:Snapshot={...fresh,items:[...added.values(),...fresh.items],
         itemsCursor:fresh.itemsCursor===boundary?encodeTurnsBoundary(response.nextCursor):fresh.itemsCursor};

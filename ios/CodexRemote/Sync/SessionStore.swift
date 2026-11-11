@@ -189,6 +189,13 @@ final class SessionStore: ObservableObject {
             guard page.nextCursor != anchor else { throw ConnectionError.invalidResponse }
             snapshot = Snapshot(cursor: current.cursor, thread: current.thread, items: mergeHistory(older: page.data, current: current.items),
                                 itemsCursor: page.nextCursor, pending: current.pending, policy: current.policy, readOnlyReason: current.readOnlyReason)
+            let existing = Set(current.items.map(\.id))
+            let added = Set(page.data.map(\.id)).subtracting(existing).count
+            if page.nextCursor == nil {
+                historyMessage = added > 0 ? "已加载较早的\(added)条记录，已到最早记录。" : "已到最早记录。"
+            } else {
+                historyMessage = added > 0 ? "已加载较早的\(added)条记录。" : "未发现新增记录，可继续加载较早记录。"
+            }
         } catch {
             guard generation == connection, selection == chosen else { return }
             if let failure = error as? ConnectionError, case .server(409, _) = failure { await selectThread(id) }

@@ -19,26 +19,32 @@ private struct WorkspaceView: View {
     @StateObject private var sender: CommandSender
     @StateObject private var lifecycle: LifecycleController
     @StateObject private var settings: ModelSettings
+    @StateObject private var navigation: WorkspaceNavigator
     @Environment(\.scenePhase) private var phase
-    @State private var path: [String] = []
     init(server: ServerConfiguration, transport: any BridgeTransport) {
         self.server = server; self.transport = transport
         let session = SessionStore()
         let lifecycle = LifecycleController(session: session, server: server, transport: transport)
         _session = StateObject(wrappedValue: session)
         _lifecycle = StateObject(wrappedValue: lifecycle)
+        _navigation = StateObject(wrappedValue: WorkspaceNavigator(session: session))
         _settings = StateObject(wrappedValue: ModelSettings(serverID: server.id, transport: transport))
         _threads = StateObject(wrappedValue: ThreadListModel(transport: transport, serverID: server.id))
         _sender = StateObject(wrappedValue: CommandSender(serverID: server.id, transport: transport, canSend: { [weak lifecycle] in lifecycle?.canWrite($0) == true }))
     }
     var body: some View {
-        TabView {
-            NavigationStack(path: $path) { ThreadListView(model: threads, serverID: server.id, openThread: { path.append($0) }) }
-                .tabItem { Label("任务", systemImage: "list.bullet.rectangle") }
-            NavigationStack { ConnectionView() }
-                .tabItem { Label("连接", systemImage: "network") }
-            NavigationStack { SettingsView() }.tabItem { Label("设置", systemImage: "gearshape") }
+        NavigationStack(path: $navigation.path) {
+            ThreadListView(model: threads, serverID: server.id, openThread: { navigation.path.append($0) })
+                .workspaceNavigationMenu()
+                .navigationDestination(for: WorkspaceDestination.self) { destination in
+                    switch destination {
+                    case .tasks: EmptyView()
+                    case .connections: ConnectionView().workspaceNavigationMenu()
+                    case .settings: SettingsView().workspaceNavigationMenu()
+                    }
+                }
         }
+        .environment(\.workspaceNavigation, { destination in Task { await navigation.show(destination) } })
         .environmentObject(session)
         .environmentObject(sender)
         .environmentObject(lifecycle)
@@ -49,8 +55,8 @@ private struct WorkspaceView: View {
             await settings.load()
         }
         .onChange(of: phase) { value in Task { await lifecycle.setActive(value == .active) } }
-        .onChange(of: path) { value in
-            if value.isEmpty, let id = session.selectedThreadID {
+        .onChange(of: navigation.path.count) { _ in
+            if navigation.path.isEmpty, let id = session.selectedThreadID {
                 let attachment = session.attachmentID
                 Task { await session.leaveThread(id, attachmentID: attachment) }
             }
@@ -128,7 +134,7 @@ struct ThreadListView: View {
             }
         }
         .searchable(text: $query, prompt: "搜索任务")
-        .navigationDestination(for: String.self) { id in ConversationView(threadID: id, serverID: serverID) }
+        .navigationDestination(for: String.self) { id in ConversationView(threadID: id, serverID: serverID).workspaceNavigationMenu() }
         .task { await model.loadProjects() }
         .task(id: Search(project: projectID, query: query)) {
             if !query.isEmpty { try? await Task.sleep(nanoseconds: 250_000_000) }
