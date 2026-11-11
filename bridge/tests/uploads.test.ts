@@ -1,7 +1,7 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAttachmentStore, validateUpload, attachmentInput } from '../src/api/uploads.js';
@@ -83,7 +83,7 @@ test('server_image_paths_stay_inside_the_authorized_project',async t=>{
   const f=await fixture(t),image=join(f.root,'existing.png');await writeFile(image,png);
   const request={id:randomUUID(),projectId:'project',name:'已有图片',kind:'serverImage',location:image};
   await f.store.save(request,f.project);
-  assert.equal((await f.store.resolve([request.id],'project'))[0]!.location,image);
+  assert.equal((await f.store.resolve([request.id],'project'))[0]!.location,await realpath(image));
   await assert.rejects(f.store.save({...request,id:randomUUID(),location:join(f.root,'..','outside.png')},f.project),/project|scope|outside/i);
 });
 
