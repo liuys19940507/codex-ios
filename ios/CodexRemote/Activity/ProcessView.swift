@@ -25,7 +25,9 @@ struct ProcessView: View {
             .buttonStyle(.plain).accessibilityLabel(expanded ? "收起处理过程" : "查看处理过程")
             .accessibilityIdentifier("查看处理过程").accessibilityValue(expanded ? "已展开" : "已收起")
             if expanded {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                // Stable row heights prevent lazy placement from cycling while
+                // scrolling large text above the fixed composer.
+                VStack(alignment: .leading, spacing: 18) {
                     ForEach(items) { item in ActivityView(item: item, partial: active, onDraft: onDraft) }
                 }
             }
