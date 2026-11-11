@@ -4,6 +4,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import type { Command, Cursor, Envelope, Json, Operation } from './contracts.js';
 import { ApiError, validateCommand } from './validation.js';
 import type { Queries } from './queries.js';
+import type { AttachmentReceipt } from './uploads.js';
 
 export interface ApiContext {
   token: string;
@@ -11,6 +12,7 @@ export interface ApiContext {
   available(): boolean;
   queries: Pick<Queries, 'queryProjects' | 'queryModels' | 'queryThreads' | 'queryMetadata' | 'querySnapshot' | 'queryItems'>;
   commands: { dispatch(command: Command): Promise<Operation> };
+  uploads?: { upload(value:unknown):Promise<AttachmentReceipt> };
   operations: { getOperation(id: string): Operation | null };
   sync: { replay(cursor: Cursor): Envelope[] | 'resync_required'; onEvent(handler: (event: Envelope) => void): () => void };
   log?(message: string): void;
@@ -49,15 +51,15 @@ export function createApiServer(context: ApiContext) {
     }
     return result;
   }
-  async function body(request: IncomingMessage): Promise<unknown> {
-    if (Number(request.headers['content-length'] ?? 0) > 1048576) { request.resume(); throw new ApiError(413, 'body_too_large', 'Request exceeds 1 MiB'); }
+  async function body(request: IncomingMessage, limit=1048576): Promise<unknown> {
+    if (Number(request.headers['content-length'] ?? 0) > limit) { request.resume(); throw new ApiError(413, 'body_too_large', `Request exceeds ${limit/1048576} MiB`); }
     if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') throw new ApiError(400, 'invalid_json', 'Send application/json');
     const data = await new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = []; let size = 0;
       const fail = (error: Error) => { cleanup(); request.resume(); reject(error); };
       const receive = (chunk: Buffer) => {
         size += chunk.length;
-        if (size > 1048576) fail(new ApiError(413, 'body_too_large', 'Request exceeds 1 MiB'));
+        if (size > limit) fail(new ApiError(413, 'body_too_large', `Request exceeds ${limit/1048576} MiB`));
         else chunks.push(chunk);
       };
       const end = () => { cleanup(); resolve(Buffer.concat(chunks)); };
@@ -76,7 +78,7 @@ export function createApiServer(context: ApiContext) {
       reply(response, apiError.status, { code: apiError.code, message: apiError.message });
     });
   });
-  server.requestTimeout = 30000;
+  server.requestTimeout = 120000;
   server.headersTimeout = 10000;
   async function route(request: IncomingMessage, response: ServerResponse) {
     if (!authenticated(request)) { request.resume(); reply(response, 401, { code: 'unauthorized', message: 'A valid bearer token is required' }); return; }
@@ -95,6 +97,11 @@ export function createApiServer(context: ApiContext) {
     else if (method === 'GET' && path === '/v1/models') { parameters(url, []); result = await context.queries.queryModels(); }
     else if (method === 'GET' && path === '/v1/threads') result = await context.queries.queryThreads(parameters(url, ['projectId', 'query', 'cursor']));
     else if (method === 'POST' && path === '/v1/commands') { parameters(url, []); result = await context.commands.dispatch(validateCommand(await body(request))); }
+    else if (method === 'POST' && path === '/v1/attachments') {
+      parameters(url, []);
+      if(!context.uploads)throw new ApiError(409,'capability_unavailable','Attachment uploads are unavailable');
+      result=await context.uploads.upload(await body(request,28*1048576));
+    }
     else {
       const thread = /^\/v1\/threads\/([^/]+)\/(metadata|snapshot|items)$/.exec(path);
       if (method !== 'GET' || !thread) throw new ApiError(404, 'not_found', 'Unknown endpoint');

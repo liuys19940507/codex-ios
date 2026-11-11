@@ -14,6 +14,7 @@ import { ApiError } from '../src/api/validation.js';
 import { connectRpc } from '../src/protocol/rpc-client.js';
 import { fakeServer, handshake } from './support/fake-server.js';
 import type { Command } from '../src/api/contracts.js';
+import { createAttachmentStore } from '../src/api/uploads.js';
 
 const command=(method:Command['method'],params:Command['params']):Command=>({id:randomUUID(),method,params});
 
@@ -99,8 +100,9 @@ async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolea
   });
   const rpc=await connectRpc(server.url,'test'),store=openStore(join(dir,'state.sqlite')),sync=createSync(store,rpc);
   const operations=createOperations(store),queries=createQueries({rpc,store,sync,projects});
-  const features={steer:true,queue:false,approvals:true,interrupt:true,fileApprovals:false,permissions:false,questions:false,mcp:false};
-  const commands=createCommands({rpc,store,sync,operations,queries,projects,features});
+  const features={steer:true,queue:false,approvals:true,interrupt:true,fileApprovals:false,permissions:false,questions:false,mcp:false,attachments:true};
+  const uploads=createAttachmentStore(join(dir,'uploads'));
+  const commands=createCommands({rpc,store,sync,operations,queries,projects,features,uploads});
   t.after(async()=>{sync.close();await rpc.close();await server.close();store.close();await rm(dir,{recursive:true,force:true});});
   await queries.querySnapshot('thread');
   async function pending() {
@@ -109,8 +111,35 @@ async function fixture(t:TestContext,options:{active?:boolean;dropCreate?:boolea
     while(!store.snapshot('thread').pending.length&&Date.now()<deadline)await delay(5);
     return store.snapshot('thread').pending[0]!;
   }
-  return {commands,calls,responses,store,features,pending,emit,queries};
+  return {commands,calls,responses,store,features,pending,emit,queries,uploads,project:projects[0]!};
 }
+
+test('uploaded_files_and_images_work_for_create_start_and_steer_without_duplicate_turns',async t=>{
+  for(const mode of ['create','start','steer']) {
+    const f=await fixture(t,{active:mode!=='start'}),fileId=randomUUID(),imageId=randomUUID();
+    await f.uploads.save({id:fileId,projectId:'project',name:'中文附件.txt',kind:'file',base64:Buffer.from('native-file-marker').toString('base64')},f.project);
+    const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZfoAAAAASUVORK5CYII=';
+    await f.uploads.save({id:imageId,projectId:'project',name:'图片.png',kind:'image',base64:png},f.project);
+    const params:Command['params']=mode==='create'?{projectId:'project',text:'',attachments:[fileId,imageId]}:
+      {threadId:'thread',text:'',mode,...(mode==='steer'?{expectedTurnId:'turn'}:{}),attachments:[fileId,imageId]};
+    const c=command(mode==='create'?'task/create':'task/input',params);
+    assert.equal((await f.commands.dispatch(c)).state,'accepted');
+    const method=mode==='steer'?'turn/steer':'turn/start',sent=f.calls.filter(call=>call.method===method);
+    assert.equal(sent.length,1);assert.equal(sent[0]!.params.input.length,2);
+    assert.ok(sent[0]!.params.input[0].text.includes('中文附件.txt'));
+    assert.equal(sent[0]!.params.input[1].type,'localImage');
+    assert.equal((await f.commands.dispatch(c)).state,'accepted');
+    assert.equal(f.calls.filter(call=>call.method===method).length,1);
+  }
+});
+
+test('missing_and_wrong_project_uploads_fail_before_creating_a_thread',async t=>{
+  const f=await fixture(t),id=randomUUID();
+  await assert.rejects(f.commands.dispatch(command('task/create',{projectId:'project',text:'read',attachments:[id]})),(error:unknown)=>error instanceof ApiError&&error.status===404);
+  await f.uploads.save({id,projectId:'other',name:'other.txt',kind:'file',base64:Buffer.from('data').toString('base64')},{...f.project,id:'other'});
+  await assert.rejects(f.commands.dispatch(command('task/create',{projectId:'project',text:'read',attachments:[id]})),(error:unknown)=>error instanceof ApiError&&error.status===403);
+  assert.equal(f.calls.filter(call=>call.method==='thread/start'||call.method==='turn/start').length,0);
+});
 
 test('unconfigured_project_and_policy_override_are_rejected_before_task_creation',async t=>{
   const f=await fixture(t);

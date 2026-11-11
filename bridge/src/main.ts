@@ -14,7 +14,8 @@ import { createOperations, type Operations } from './state/operations.js';
 import { createQueries, type Queries } from './api/queries.js';
 import { createCommands, type Commands } from './api/commands.js';
 import { createApiServer } from './api/server.js';
-import { ApiError } from './api/validation.js';
+import { ApiError, requireProject } from './api/validation.js';
+import { createAttachmentStore, validateUpload } from './api/uploads.js';
 import type { Envelope } from './api/contracts.js';
 
 interface Dependencies {
@@ -55,13 +56,15 @@ export async function startBridge(config: RuntimeConfig, dependencies: Dependenc
   const requireValue = <T>(value: T | undefined): T => { if (!value) throw new ApiError(503, 'upstream_unavailable', 'Codex is reconnecting'); return value; };
   // Real control probe passed on 0.167.0. Other request-generation paths stay
   // disabled until independently exercised against the native server.
-  const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: true, permissions: false, questions: true, mcp: false, threadMetadata: true };
+  const uploads=createAttachmentStore(join(config.stateDir,'uploads'));
+  const features = { steer: true, queue: false, approvals: true, interrupt: true, childThreads: false, fileApprovals: true, permissions: false, questions: true, mcp: false, threadMetadata: true, attachments: true };
   const api = createApiServer({ token, info: { apiVersion: 1, serverId, codexVersion: '0.167.0', features }, available: () => available,
     queries: {
       queryProjects: () => requireValue(queries).queryProjects(), queryModels: () => requireValue(queries).queryModels(),
       queryThreads: input => requireValue(queries).queryThreads(input), querySnapshot: id => requireValue(queries).querySnapshot(id), queryItems: (id, cursor) => requireValue(queries).queryItems(id, cursor),
       queryMetadata: id => requireValue(queries).queryMetadata(id),
-    }, commands: { dispatch: command => requireValue(commands).dispatch(command) }, operations: { getOperation: id => requireValue(operations).getOperation(id) },
+    }, uploads: {upload:async value=>{const input=validateUpload(value);return uploads.save(input,requireProject(await requireValue(queries).queryProjects(),input.projectId));}},
+    commands: { dispatch: command => requireValue(commands).dispatch(command) }, operations: { getOperation: id => requireValue(operations).getOperation(id) },
     sync: { replay: cursor => sync?.replay(cursor) ?? 'resync_required', onEvent: handler => { listeners.add(handler); return () => { listeners.delete(handler); }; } },
   });
   try {
@@ -84,7 +87,7 @@ export async function startBridge(config: RuntimeConfig, dependencies: Dependenc
       sync = createSync(requireValue(store), client);
       sync.onEvent(event => { for (const listener of listeners) listener(event); });
       queries = createQueries({ rpc: client, store: requireValue(store), sync, projects: config.projects,discoverProjects:config.discoverProjects });
-      commands = createCommands({ rpc: client, store: requireValue(store), sync, operations: requireValue(operations), queries, projects: config.projects, features });
+      commands = createCommands({ rpc: client, store: requireValue(store), sync, operations: requireValue(operations), queries, projects: config.projects, features, uploads });
       client.onClose(() => {
         if (closed || rpc !== client) return;
         available = false; api.invalidate(); sync?.close(); sync = undefined; queries = undefined; commands = undefined;

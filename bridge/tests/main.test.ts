@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type WebSocket from 'ws';
 import { startBridge } from '../src/main.js';
 import { fakeServer, handshake } from './support/fake-server.js';
+import { createAttachmentStore } from '../src/api/uploads.js';
 
 async function fixture(t:TestContext) {
   const stateDir=await mkdtemp(join(tmpdir(),'codex-main-'));
@@ -29,6 +30,27 @@ async function fixture(t:TestContext) {
   t.after(async()=>{await runtime?.close();await server.close();await rm(stateDir,{recursive:true,force:true});});
   return {config,dependencies,calls,start:async()=>runtime=await startBridge(config,dependencies),cut:()=>socket!.terminate()};
 }
+
+test('upload_endpoint_is_authenticated_project_scoped_and_does_not_take_control',async t=>{
+  const f=await fixture(t);await f.start();
+  const token=(await readFile(join(f.config.stateDir,'bridge-token'),'utf8')).trim();
+  const base=`http://${f.config.bridgeHost}:${f.config.bridgePort}`,headers={Authorization:`Bearer ${token}`,'Content-Type':'application/json'};
+  const request={id:randomUUID(),projectId:'controlled',name:'手机 文档.txt',kind:'file',base64:Buffer.alloc(2*1024*1024,65).toString('base64')};
+  assert.equal((await fetch(`${base}/v1/attachments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)})).status,401);
+  assert.deepEqual(f.calls,[]);
+  const info=await fetch(`${base}/v1/info`,{headers}).then(r=>r.json()) as any;
+  assert.equal(info.features.attachments,true);
+  const response=await fetch(`${base}/v1/attachments`,{method:'POST',headers,body:JSON.stringify(request)});
+  assert.equal(response.status,200);
+  const receipt=await response.json() as any;assert.equal(receipt.id,request.id);assert.equal(receipt.size,2*1024*1024);
+  const retry=await fetch(`${base}/v1/attachments`,{method:'POST',headers,body:JSON.stringify(request)});
+  assert.deepEqual(await retry.json(),receipt);
+  const [saved]=await createAttachmentStore(join(f.config.stateDir,'uploads')).resolve([request.id],'controlled');
+  assert.equal((await readFile(saved!.location)).length,2*1024*1024);
+  assert.equal((await fetch(`${base}/v1/attachments`,{method:'POST',headers,body:JSON.stringify({...request,id:randomUUID(),projectId:'outside'})})).status,404);
+  assert.equal((await fetch(`${base}/v1/attachments?unexpected=true`,{method:'POST',headers,body:JSON.stringify(request)})).status,400);
+  assert.deepEqual(f.calls,[],'Upload must never resume/attach/start a task');
+});
 
 test('metadata_feature_and_authenticated_endpoint_only_read_thread_metadata',async t=>{
   const f=await fixture(t),runtime=await f.start();

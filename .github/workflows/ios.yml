@@ -1,48 +1,53 @@
-name: iOS (manual fallback)
+name: iOS
 on:
   workflow_dispatch:
+    inputs:
+      only_testing:
+        description: Optional Xcode test filter (diagnosis only, no IPA)
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: read
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 jobs:
-  simulator:
+  ios:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: bash scripts/ci/install-xcodegen.sh
-      - run: bash scripts/ci/test-ios.sh
-      - run: bash scripts/ci/verify-ios-tests.sh
-      - run: xcrun xcresulttool export attachments --path build/CodexRemote.xcresult --output-path build/ios-screenshots
-        if: always()
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Verify pipeline failure gates
+        run: bash scripts/ci/tests/codemagic-ios.test.sh
+      - name: Install pinned XcodeGen
+        run: bash scripts/ci/install-xcodegen.sh
+      - name: Run focused diagnostic tests (no package)
+        if: inputs.only_testing != ''
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: bash scripts/ci/diagnose-ios.sh "$ONLY_TESTING"
+      - name: Run all tests and archive device IPA only after success
+        if: inputs.only_testing == ''
+        run: bash scripts/ci/codemagic-ios.sh
+      - name: Keep screenshots and test recordings
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: ios-screenshots-${{ github.sha }}
-          path: build/ios-screenshots
-          if-no-files-found: ignore
-          retention-days: 14
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: ios-tests-${{ github.sha }}
+          name: ios-results-${{ github.sha }}
           path: |
-            build/CodexRemote.xcresult
+            build/commit.txt
+            build/ios-test.log
             build/ios-test-summary.json
-          if-no-files-found: ignore
-          retention-days: 14
-  package:
-    runs-on: macos-15
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: bash scripts/ci/install-xcodegen.sh
-      - run: bash scripts/ci/package-ios.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+            build/CodexRemote-tests.zip
+            build/ios-screenshots.zip
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Keep verified device IPA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: success() && inputs.only_testing == ''
         with:
           name: CodexRemote-unsigned-${{ github.sha }}
           path: |
@@ -50,5 +55,6 @@ jobs:
             build/CodexRemote-unsigned.ipa.sha256
             build/commit.txt
             build/Package.resolved
+            build/ios-test-summary.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7

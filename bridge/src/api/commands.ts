@@ -8,8 +8,9 @@ import type { Queries } from './queries.js';
 import { type Operations, UncertainOperationError } from '../state/operations.js';
 import { object } from '../state/reducer.js';
 import { validatePendingResponse } from './responses.js';
+import { attachmentInput, type AttachmentStore } from './uploads.js';
 
-type Context={rpc:RpcClient;store:Store;sync:SyncService;operations:Operations;queries:Queries;projects:RuntimeConfig['projects'];features:Record<string,boolean>};
+type Context={rpc:RpcClient;store:Store;sync:SyncService;operations:Operations;queries:Queries;projects:RuntimeConfig['projects'];features:Record<string,boolean>;uploads?:AttachmentStore};
 export function createCommands(context:Context) {
   const {rpc,store,sync,operations,queries,projects,features}=context;
   const attachmentWork=new Map<string,Promise<Operation>>();
@@ -22,7 +23,6 @@ export function createCommands(context:Context) {
   }
   const conflict=(message:string):never=>{throw new ApiError(409,'state_conflict',message);};
   const capability=(name:string):void=>{if(!features[name])throw new ApiError(409,'capability_unavailable',`${name} is not enabled by this server`);};
-  const input=(text:Json|undefined)=>[{type:'text',text:String(text),text_elements:[]}];
   function responseFor(command:Command,snapshot:Snapshot) {
     const p=command.params,stored=store.pending(String(p.requestId));
     if(!stored)throw new ApiError(409,'request_expired','This request is no longer valid');
@@ -62,6 +62,15 @@ export function createCommands(context:Context) {
       } else if(command.method==='request/respond')responseFor(command,snapshot);
       else if(command.method==='thread/archive'&&snapshot.thread.activeTurnId)conflict('Interrupt the active turn before archiving');
     }
+    let input:ReturnType<typeof attachmentInput>=[];
+    if(command.method==='task/create'||command.method==='task/input') {
+      const projectId=command.method==='task/create'?String(p.projectId):snapshot!.thread.projectId;
+      if(p.attachments!==undefined) {
+        capability('attachments');
+        if(!context.uploads)throw new ApiError(409,'capability_unavailable','Attachment storage is unavailable');
+        input=attachmentInput(String(p.text),await context.uploads.resolve(p.attachments as string[],projectId));
+      } else input=attachmentInput(String(p.text),[]);
+    }
     return operations.executeOnce(command,async()=>{
       if(command.method==='task/create') {
         const project=requireProject(await queries.queryProjects(),String(p.projectId));
@@ -69,17 +78,17 @@ export function createCommands(context:Context) {
         const threadId=object(started.thread).id;
         if(typeof threadId!=='string')throw new Error('Thread creation response has no identity');
         try {
-          const response=object(await rpc.request('turn/start',{threadId,input:input(p.text),...(p.model?{model:p.model}:{}),...(p.reasoning?{effort:p.reasoning}:{})}));
+          const response=object(await rpc.request('turn/start',{threadId,input,...(p.model?{model:p.model}:{}),...(p.reasoning?{effort:p.reasoning}:{})}));
           return {threadId,turnId:String(object(response.turn).id)};
         } catch {throw new UncertainOperationError('Thread exists, but its first turn was not confirmed',{threadId});}
       }
       const threadId=String(p.threadId);
       if(command.method==='task/input') {
-        if(p.mode==='steer')return rpc.request('turn/steer',{threadId,expectedTurnId:p.expectedTurnId!,input:input(p.text)});
+        if(p.mode==='steer')return rpc.request('turn/steer',{threadId,expectedTurnId:p.expectedTurnId!,input});
         if(p.mode==='queue')throw new ApiError(409,'capability_unavailable','Queue adapter is not validated');
         const resumed=await sync.resumeForWrite(threadId);
         if(resumed.thread.activeTurnId||resumed.thread.status==='active')conflict('Another client has started a turn; refresh before sending');
-        const response=object(await rpc.request('turn/start',{threadId,input:input(p.text)}));
+        const response=object(await rpc.request('turn/start',{threadId,input}));
         return {threadId,turnId:String(object(response.turn).id)};
       }
       if(command.method==='task/interrupt')return rpc.request('turn/interrupt',{threadId,turnId:p.turnId!});
