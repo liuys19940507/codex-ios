@@ -2,11 +2,11 @@
 
 本轮以 `ffadf72` 为首版检查点，Windows Codex0.167.0/Node22.22/PowerShell5.1，Swift5/iOS16目标、Codemagic个人M2/Xcode26.3云端构建。新增功能范围见[Android 参考对照](../android-reference.md)。
 
-当前可安装候选为 `93696d612bbc9f93464569c8e72a7c4e49efb9f6` 的 [Codemagic构建28](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af3b490c11d91681b28d9e0)：实际100/100通过（84项单元、16项UI），无失败或跳过，Release真机归档成功。独立核验对应提交、测试统计、SHA256、Bundle ID、0.1.0/build5、iphoneos、arm64 Mach-O和完整依赖锁文件全部通过，9张实际置顶、固定输入框、浅色/深色代码及最大字号截图已检查。IPA为876798字节，SHA256为`02cdd8af1f00575a8804d2fceed48a932f14197c80b731dd351bc8dc91964c3a`，本机路径为 `D:/other/codex_app/.local/artifacts/CodexRemote-build5.ipa`，复制后校验值一致。build4保留原样；build5手机覆盖安装、双任务置顶重启保留和多行输入仍待用户实测。
+当前交付版本为 `93696d612bbc9f93464569c8e72a7c4e49efb9f6` 的 [Codemagic构建28](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af3b490c11d91681b28d9e0)：实际100/100通过（84项单元、16项UI），无失败或跳过，Release真机归档成功。独立核验对应提交、测试统计、SHA256、Bundle ID、0.1.0/build5、iphoneos、arm64 Mach-O和完整依赖锁文件全部通过，9张实际置顶、固定输入框、浅色/深色代码及最大字号截图已检查。IPA为876798字节，SHA256为`02cdd8af1f00575a8804d2fceed48a932f14197c80b731dd351bc8dc91964c3a`，本机路径为 `D:/other/codex_app/.local/artifacts/CodexRemote-build5.ipa`，复制后校验值一致。build4保留原样。用户已确认build5覆盖安装后原连接与草稿保留，两个任务同时置顶、重开后保留，以及多行输入固定高度均正常。
 
 新增置顶记录按连接分别保存在手机，多个任务同时置顶，后置顶的在前；左滑或长按可取消。9项单元测试覆盖持久化、连接隔离、分页、搜索/项目筛选、过期响应和读写失败，UI用例实际通过双任务置顶、重开保留顺序及取消置顶。原输入框增长在构建27实际复现（普通56→160点、最大字号78→160点），修订后两项UI测试均通过：高度取决于字号，文字在框内滚动。
 
-置顶刷新使用新增的认证 metadata GET 和能力标记，仅调用原生 thread/read，不附加会话或取得控制；旧桥接保留本地缓存。对应3项Node回归先失败后通过，完整106项和类型检查通过。继续任务时系统服务已经重新启动，实测当前原生PID9268、桥接PID24488的能力标记和任务摘要接口正常，服务身份一致，本轮无需重启任何进程。无模型输入的独立探针现已确认“AI平台-agent”和“codex远程控制app”均接受共享恢复，且释放了探针自身订阅；手机刷新后的可发送状态仍待用户确认。
+置顶刷新使用新增的认证 metadata GET 和能力标记，仅调用原生 thread/read，不附加会话或取得控制；旧桥接保留本地缓存。对应3项Node回归先失败后通过，完整106项和类型检查通过。继续任务时系统服务已经重新启动，实测当前原生PID9268、桥接PID24488的能力标记和任务摘要接口正常，服务身份一致，本轮无需重启任何进程。无模型输入的独立探针现已确认“AI平台-agent”和“codex远程控制app”均接受共享恢复，且释放了探针自身订阅。用户随后确认在原只读会话刷新并输入文字后，发送按钮已恢复可用。
 
 上一版build4为 `476beb8394ff78ca84c26b5e75a18ad07438d052` 的 [Codemagic构建25](https://codemagic.io/app/6af2b0d8392f5c83a397ccfd/build/6af318e7d9c8f862da4f4c11)：实际88/88通过（75项单元、13项UI），Release真机归档成功。下载后独立核验对应提交、完整测试统计、SHA256、Bundle ID、0.1.0/build4、iphoneos、arm64 Mach-O及完整依赖锁文件均通过；6张实际浅色、深色、代码查看器和最大字号截图已检查。IPA为862541字节，SHA256为`078eb136298ac50a01cfc3f4bb500b4629608581e36001cd234c1ef2f6d2cc5d`。本人已确认build4覆盖安装后原连接与中文emoji草稿保留，并确认实际长会话显示、滚动、过程展开和刷新正常。
 
