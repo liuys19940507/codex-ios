@@ -75,6 +75,15 @@ final class AttachmentUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "预览附件：")).firstMatch
     }
     private func capture(_ name: String, _ app: XCUIApplication) {
+        let keyboardTutorial = app.buttons["Continue"]
+        if keyboardTutorial.exists && keyboardTutorial.isHittable { keyboardTutorial.tap() }
+        let dismiss = app.buttons["收起键盘"]
+        if dismiss.waitForExistence(timeout: 3) && dismiss.isHittable { dismiss.tap() }
+        let preview = firstPreview(in: app)
+        if preview.exists {
+            let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: preview)
+            XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
+        }
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }

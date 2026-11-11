@@ -38,7 +38,8 @@ final class ComposerModel: ObservableObject {
         beginAttachmentImport(); defer { endAttachmentImport() }
         let store = attachmentStore, server = serverID
         let item = try await Task.detached(priority: .userInitiated) { try store.store(data, name: name, kind: kind, serverID: server) }.value
-        try append(item)
+        do { try append(item) }
+        catch { try? store.discardUnreferenced(item, serverID: server); throw error }
     }
     func addImageAddress(_ value: String, serverPath: Bool) async throws {
         let location = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -68,6 +69,8 @@ final class ComposerModel: ObservableObject {
     func reportAttachmentError(_ error: Error) { message = error.localizedDescription }
     private func upload(_ items: [DraftAttachment], projectID: String, using sender: CommandSender, method: Command.Method) async throws {
         let store = attachmentStore, server = serverID
+        let lease = try store.lease(items, serverID: server)
+        defer { lease.release() }
         for (index, item) in items.enumerated() {
             message = "正在上传附件 \(index + 1)/\(items.count)…"
             let payload = try await Task.detached(priority: .userInitiated) { try store.payload(for: item, serverID: server, projectID: projectID) }.value

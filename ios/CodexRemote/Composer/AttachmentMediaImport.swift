@@ -48,10 +48,6 @@ enum AttachmentMediaImport {
         return Item(data: data, name: file.lastPathComponent, kind: kind)
     }
     private static func load(_ provider: NSItemProvider) async throws -> Item {
-        if let type = provider.registeredTypeIdentifiers.first(where: { UTType($0)?.conforms(to: .image) == true }) {
-            let data = try await data(provider, type: type)
-            return Item(data: data, name: provider.suggestedName ?? "粘贴图片", kind: .image)
-        }
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             return try await withCheckedThrowingContinuation { continuation in
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { value, error in
@@ -68,32 +64,24 @@ enum AttachmentMediaImport {
                 }
             }
         }
-        guard let type = provider.registeredTypeIdentifiers.first(where: canPasteType) else { throw ClientCommandError(message: "剪贴板中没有可添加的图片或文件。") }
-        let suggested = provider.suggestedName ?? "粘贴文件"
+        let imageType = provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) == true }
+        guard let type = imageType ?? provider.registeredTypeIdentifiers.first(where: canPasteType) else { throw ClientCommandError(message: "剪贴板中没有可添加的图片或文件。") }
+        let kind: AttachmentKind = imageType == nil ? .file : .image
+        let suggested = provider.suggestedName ?? (kind == .image ? "粘贴图片" : "粘贴文件")
         let suffix = UTType(type)?.preferredFilenameExtension ?? "bin"
         let name = (suggested as NSString).pathExtension.isEmpty ? suggested + "." + suffix : suggested
-        do {
-            return try await withCheckedThrowingContinuation { continuation in
-                provider.loadFileRepresentation(forTypeIdentifier: type) { url, error in
-                    if let error { continuation.resume(throwing: error); return }
-                    do {
-                        guard let url else { throw ConnectionError.invalidResponse }
-                        let loaded = try readFile(url)
-                        continuation.resume(returning: Item(data: loaded.data, name: name, kind: .file))
-                    } catch { continuation.resume(throwing: error) }
-                }
-            }
-        } catch { return Item(data: try await data(provider, type: type), name: name, kind: .file) }
-    }
-    private static func data(_ provider: NSItemProvider, type: String) async throws -> Data {
-        let value: Data = try await withCheckedThrowingContinuation { continuation in
-            provider.loadDataRepresentation(forTypeIdentifier: type) { data, error in
-                if let error { continuation.resume(throwing: error) }
-                else if let data { continuation.resume(returning: data) }
-                else { continuation.resume(throwing: ConnectionError.invalidResponse) }
+        // Copy within the provider callback: its temporary file is removed on return.
+        // Do not retry a bounded-read failure through whole-payload Data loading.
+        return try await withCheckedThrowingContinuation { continuation in
+            provider.loadFileRepresentation(forTypeIdentifier: type) { url, error in
+                if let error { continuation.resume(throwing: error); return }
+                do {
+                    guard let url else { throw ConnectionError.invalidResponse }
+                    let loaded = try readFile(url)
+                    continuation.resume(returning: Item(data: loaded.data, name: name, kind: kind))
+                } catch { continuation.resume(throwing: error) }
             }
         }
-        try AttachmentLimits.data(value); return value
     }
     private static func normalized(_ item: Item) throws -> Item {
         guard item.kind == .image else { return item }

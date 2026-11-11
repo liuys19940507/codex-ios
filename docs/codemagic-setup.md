@@ -1,11 +1,11 @@
 # Codemagic iOS 构建
 
-本项目使用个人 Codemagic 账号的 Mac mini M2 构建机，Xcode 固定为26.3，复用仓库中的模拟器测试及未签名 arm64 IPA 打包脚本。配置位于根目录 [codemagic.yaml](../codemagic.yaml)。GitHub iOS 工作流保留为手动备用，当前不再由推送触发。
+本项目当前使用 [GitHub Actions](github-actions-ios.md) 构建 iOS；个人 Codemagic 的 Mac mini M2 配置保留为备用。Xcode 固定为26.3，两个平台复用仓库中的模拟器测试及未签名 arm64 IPA 打包脚本。备用配置位于根目录 [codemagic.yaml](../codemagic.yaml)。构建由手动或 API 启动，推送不自动触发 iOS 构建。
 
 ## 首次接入
 
 1. 使用已有 GitHub 账号登录 [Codemagic](https://codemagic.io/login)，选择 Personal account。
-2. 在 Applications 添加私有仓库 `liuys19940507/codex-ios`，使用 YAML 配置。需要时只授权该仓库。
+2. 在 Applications 添加仓库 `liuys19940507/codex-ios`（现已公开），使用 YAML 配置。需要时只授权该仓库。
 3. 点击 Start new build，选择分支 `feat/native-ios-remote`，工作流 `ios-verify-package`。配置目前在这个开发分支，不能选择旧的 main 分支构建新版。
 
 目前采用手动或 API 启动构建；没有自动构建 webhook，避免每次推送重复消耗额度。个人 M2 免费额度和超额费率以 [Codemagic 当前规则](https://docs.codemagic.io/billing/pricing/) 为准；本配置不启用付费机型、团队订阅、Apple 签名或商店发布。
