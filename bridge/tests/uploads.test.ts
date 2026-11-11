@@ -43,6 +43,13 @@ test('attachment_resolution_rejects_other_projects_missing_and_deleted_files',as
   await assert.rejects(f.store.resolve([request.id],'project'),/found|missing/i);
 });
 
+test('changed_stored_bytes_are_rejected_before_they_reach_a_turn',async t=>{
+  const f=await fixture(t),request=upload();await f.store.save(request,f.project);
+  const [saved]=await f.store.resolve([request.id],'project');
+  await writeFile(saved!.location,'unexpected changed content');
+  await assert.rejects(f.store.resolve([request.id],'project'),/changed|corrupt|content/i);
+});
+
 test('malformed_empty_oversized_and_path_like_uploads_are_rejected',async t=>{
   const f=await fixture(t);
   for(const request of [upload({id:'../outside'}),upload({name:'../outside.txt'}),upload({name:'bad\nname.txt'}),upload({base64:'%%%'}),upload({base64:''}),upload({base64:'YQ'}),upload({extra:true}),upload({kind:'script'})]) {

@@ -78,6 +78,9 @@ export function createAttachmentStore(directory:string) {
         const actual=await realpath(value.location);
         if(!inside(await realpath(folder),actual)||(await stat(actual)).isDirectory())fail('Saved attachment path is outside its storage scope',409);
         value.location=actual;
+        const data=await boundedRead(actual);
+        if(data.length!==value.size||createHash('sha256').update(data).digest('hex')!==value.digest)fail('Stored attachment content changed; add it again',409);
+        if(value.kind==='image')image(data);
       } else if(value.kind==='serverImage') {
         if(typeof value.projectRoot!=='string'||!inside(value.projectRoot,await realpath(value.location)))fail('Image is outside the project scope',409);
         const data=await boundedRead(value.location);image(data);
