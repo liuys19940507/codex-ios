@@ -19,7 +19,10 @@ final class RenderingUITests: XCTestCase {
         XCTAssertTrue(fullCode.isHittable)
         fullCode.tap()
         XCTAssertTrue(app.navigationBars["swift"].waitForExistence(timeout: 5))
-        let code = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "print(greeting)")).firstMatch
+        let viewer = app.scrollViews["raw-output-scroll"]
+        XCTAssertTrue(viewer.waitForExistence(timeout: 5))
+        // The same code also exists in the conversation behind the sheet.
+        let code = viewer.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "print(greeting)")).firstMatch
         XCTAssertTrue(code.exists)
         XCTAssertLessThan(code.frame.minY, app.navigationBars["swift"].frame.maxY + 80, "Short code should start at the top of the viewer")
         app.buttons["复制全部"].tap()

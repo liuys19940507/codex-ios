@@ -52,6 +52,7 @@ struct RawOutputSheet: View {
                     }.padding()
                         .frame(minWidth: viewport.size.width, minHeight: viewport.size.height, alignment: .topLeading)
                 }
+                .accessibilityIdentifier("raw-output-scroll")
             }
             .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
             .toolbar {
