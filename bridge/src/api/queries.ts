@@ -7,6 +7,7 @@ import type { Store } from '../state/store.js';
 import type { SyncService } from '../state/sync.js';
 import { object, projectItem, summary } from '../state/reducer.js';
 import { createProjectCatalog, sourceKinds } from './project-catalog.js';
+import { encodeTurnsBoundary, decodeTurnsBoundary } from '../state/history-boundary.js';
 
 export type QueryContext={rpc:RpcClient;store:Store;sync:SyncService;projects:RuntimeConfig['projects'];discoverProjects?:boolean};
 export {sourceKinds};
@@ -61,7 +62,8 @@ export function createQueries(context:QueryContext) {
   }
   function historyCursor(snapshot:Snapshot,items:Item[],upstream:string|null):string|null {
     return items.length>50?encode({kind:'local',threadId:snapshot.thread.id,epoch:snapshot.cursor.epoch,anchor:items[items.length-50]!.id,upstream}):
-      upstream?encode({kind:'upstream',threadId:snapshot.thread.id,epoch:snapshot.cursor.epoch,cursor:upstream}):null;
+      upstream?encode({kind:'upstream',threadId:snapshot.thread.id,epoch:snapshot.cursor.epoch,cursor:upstream,
+        ...(decodeTurnsBoundary(upstream)!==null?{anchor:items[0]?.id??snapshot.items[0]?.id??null}:{})}):null;
   }
   async function querySnapshot(threadId:string):Promise<Snapshot> {
     await authorizeThread(threadId);
@@ -78,15 +80,54 @@ export function createQueries(context:QueryContext) {
       const before=snapshot.items.findIndex(item=>item.id===value.anchor);
       if(before<0)throw new ApiError(409,'resync_required','History anchor is no longer available');
       const items=snapshot.items.slice(0,before);
-      return {data:items.slice(-50),nextCursor:historyCursor(snapshot,items,typeof value.upstream==='string'?value.upstream:null)};
+      const old=typeof value.upstream==='string'?value.upstream:null;
+      const boundary=old&&decodeTurnsBoundary(old)!==null?snapshot.itemsCursor:old;
+      return {data:items.slice(-50),nextCursor:historyCursor(snapshot,items,boundary)};
     }
     if(value.kind!=='upstream'||typeof value.cursor!=='string')throw new ApiError(400,'invalid_cursor','Invalid item cursor');
+    if(decodeTurnsBoundary(value.cursor)!==null)return olderTurns(threadId,value);
     const response=object(await rpc.request('thread/items/list',{threadId,cursor:value.cursor,limit:50,sortDirection:'desc'}));
     const data=(Array.isArray(response.data)?response.data:[]).map(raw=>{
       const entry=object(raw),item=object(entry.item);
       return projectItem(item,String(entry.turnId),entry.completedAtMs!=null||item.completedAtMs!=null||['completed','failed','declined'].includes(String(item.status)));
     }).reverse();
     return {data,nextCursor:typeof response.nextCursor==='string'?encode({...value,cursor:response.nextCursor}):null};
+  }
+  async function olderTurns(threadId:string,value:Record<string,any>):Promise<{data:Item[];nextCursor:string|null}> {
+    if(value.anchor!==null&&typeof value.anchor!=='string')throw new ApiError(400,'invalid_cursor','Missing history anchor');
+    for(let attempt=0;attempt<20;attempt++) {
+      const current=store.snapshot(threadId);
+      const index=value.anchor===null?current.items.length:current.items.findIndex(item=>item.id===value.anchor);
+      if(index<0)throw new ApiError(409,'resync_required','History anchor is no longer available');
+      if(index>0) {
+        const items=current.items.slice(0,index);
+        return {data:items.slice(-50),nextCursor:historyCursor(current,items,current.itemsCursor)};
+      }
+      if(current.itemsCursor===null)return {data:[],nextCursor:null};
+      const boundary=current.itemsCursor,nativeCursor=decodeTurnsBoundary(boundary);
+      if(nativeCursor===null)throw new ApiError(409,'resync_required','History source changed; reload the snapshot');
+      const response=object(await rpc.request('thread/turns/list',{threadId,cursor:nativeCursor,limit:1,sortDirection:'desc',itemsView:'full'}));
+      if(!Array.isArray(response.data)||!(response.nextCursor===null||typeof response.nextCursor==='string')||response.nextCursor===nativeCursor)
+        throw new ApiError(503,'upstream_invalid','History pagination did not advance');
+      const fetched:Item[]=[];
+      for(const raw of [...response.data].reverse()) {
+        const turn=object(raw);
+        if(typeof turn.id!=='string'||!Array.isArray(turn.items))throw new ApiError(503,'upstream_invalid','Invalid history turn');
+        for(const rawItem of turn.items) {
+          const item=object(rawItem);
+          if(typeof item.id!=='string'||!item.id)throw new ApiError(503,'upstream_invalid','Invalid history item');
+          fetched.push(projectItem(item,turn.id,turn.status==='completed'||item.completedAtMs!=null||['completed','failed','declined'].includes(String(item.status))));
+        }
+      }
+      // Read again after RPC: live deltas/metadata may have changed the cache.
+      const fresh=store.snapshot(threadId),known=new Set(fresh.items.map(item=>item.id));
+      const added=new Map(fetched.filter(item=>!known.has(item.id)).map(item=>[item.id,item]));
+      const merged:Snapshot={...fresh,items:[...added.values(),...fresh.items],
+        itemsCursor:fresh.itemsCursor===boundary?encodeTurnsBoundary(response.nextCursor):fresh.itemsCursor};
+      store.atomic(()=>store.putSnapshot(merged));
+    }
+    const current=store.snapshot(threadId);
+    return {data:[],nextCursor:historyCursor(current,[],current.itemsCursor)};
   }
   async function queryModels():Promise<{id:string;name:string;reasoning:string[]}[]> {
     const models:{id:string;name:string;reasoning:string[]}[]=[];let cursor:string|null=null;

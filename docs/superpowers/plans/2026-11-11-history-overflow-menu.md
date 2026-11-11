@@ -29,14 +29,14 @@
 
 ### Task 1: Correct bridge history continuation
 
-**Files:** bridge/src/state/sync.ts, bridge/src/api/queries.ts, new bridge/src/state/history-boundary.ts, bridge/tests/queries.test.ts.
+**Files:** bridge/src/state/sync.ts, bridge/src/api/queries.ts, new bridge/src/state/history-boundary.ts, bridge/tests/history.test.ts.
 
 **Interfaces:** history-boundary exports encodeTurnsBoundary(cursor:unknown):string|null and decodeTurnsBoundary(value:string):string|null. Sync stores a tagged initialTurnsPage.nextCursor. Queries preserve external cursors, add an anchor to upstream cursors, merge older full-turn items into the current snapshot, and return bounded pages.
 
-- [ ] Add tests for terminal hydration cursors,75-item older turns across50-item pages, concurrent reader reuse/live snapshot updates, and empty-page continuation/repeated-cursor rejection.
-- [ ] Run focused Node tests and observe the actual assertions fail.
-- [ ] Implement the source distinction and anchored cached continuation. Fetch one older turn, merge with current items winning, update only the matching boundary, and cap empty-page traversal.
-- [ ] Run focused tests, full Node suite and typecheck. Commit and retain actual RED/GREEN logs.
+- [x] Add tests for terminal hydration cursors,75-item older turns across50-item pages, concurrent reader reuse/live snapshot updates, and empty-page continuation/repeated-cursor rejection.
+- [x] Run focused Node tests and observe the actual assertions fail.
+- [x] Implement the source distinction and anchored cached continuation. Fetch one older turn, merge with current items winning, update only the matching boundary, and cap empty-page traversal.
+- [x] Run focused tests, full Node suite and typecheck. Commit and retain actual RED/GREEN logs.
 
 ### Task 2: Top-right workspace menu and history feedback
 

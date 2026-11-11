@@ -5,6 +5,7 @@ import type { RpcClient } from '../protocol/rpc-client.js';
 import type { Store } from './store.js';
 import { object, projectItem, summary } from './reducer.js';
 import { RpcError } from '../protocol/rpc-client.js';
+import { encodeTurnsBoundary } from './history-boundary.js';
 
 export type SourceEvent={connectionId:string;ordinal:number;message:Json};
 export class SyncService {
@@ -155,7 +156,11 @@ export class SyncService {
       const completed=turn.status==='completed'||item.completedAtMs!=null||['completed','failed','declined'].includes(String(item.status));
       items.push(projectItem(raw,String(turn.id),completed));
     }
-    const snapshot:Snapshot={cursor:this.store.cursor(),thread:threadSummary,items,itemsCursor:response.itemsBackwardsCursor??null,pending,
+    // The resume item cursor starts hydration near the newest item. It does
+    // not continue beyond a separately hydrated initial turns page.
+    const itemsCursor=Array.isArray(page.data)?encodeTurnsBoundary(page.nextCursor):
+      Array.isArray(thread.turns)?null:typeof response.itemsBackwardsCursor==='string'?response.itemsBackwardsCursor:null;
+    const snapshot:Snapshot={cursor:this.store.cursor(),thread:threadSummary,items,itemsCursor,pending,
       ...(this.readOnly.has(threadSummary.id)?{readOnlyReason:this.readOnly.get(threadSummary.id)!}:{}),
       policy:{approvalPolicy:typeof response.approvalPolicy==='string'?response.approvalPolicy:null,
         sandbox:typeof object(response.sandbox).type==='string'?response.sandbox.type:null}};
