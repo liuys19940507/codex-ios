@@ -11,7 +11,8 @@ struct ComposerView: View {
     var features: [String: Bool] = [:]
     @State private var mode: InputMode = .steer
     @ScaledMetric(relativeTo: .body) private var editorFontSize: CGFloat = 17
-    @FocusState private var editing: Bool
+    @State private var editing = false
+    @State private var contextID = UUID()
     private var running: Bool { snapshot?.thread.activeTurnId != nil || snapshot?.thread.status == "active" }
     private var chosenMode: InputMode {
         if !running { return .start }
@@ -22,7 +23,7 @@ struct ComposerView: View {
         return ["threadId": .string(snapshot?.thread.id ?? "")]
     }
     private var enabled: Bool {
-        guard lifecycle.active, lifecycle.ready, model.writable, !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        guard lifecycle.active, lifecycle.ready, model.writable, model.hasContent, !model.importing, !model.uploading,
               !sender.busy, sender.canSubmit(.input), sender.blocked(method: .input, params: target) == nil else { return false }
         guard snapshot != nil else { return false }
         return !running || (chosenMode == .steer ? features["steer"] == true : features["queue"] == true)
@@ -34,28 +35,28 @@ struct ComposerView: View {
     }
     var body: some View {
         compactComposer
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("收起键盘") { editing = false }
-            }
-        }
+            .onChange(of: lifecycle.active) { _ in contextID = UUID() }
+            .onChange(of: session.selectedThreadID) { _ in contextID = UUID() }
+            .onDisappear { contextID = UUID() }
     }
     private var compactComposer: some View {
         VStack(alignment: .leading, spacing: 6) {
+            AttachmentStrip(model: model)
             HStack(alignment: .bottom, spacing: 8) {
-                TextEditor(text: $model.text).font(.system(size: editorFontSize)).scrollContentBackground(.hidden)
+                AttachmentControls(model: model)
+                PasteTextView(text: $model.text, focused: $editing, fontSize: editorFontSize, editable: model.writable) { providers in
+                    Task { await AttachmentMediaImport.add(providers, to: model) }
+                }
                     .frame(height: editorHeight)
                     .padding(4)
                     .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                    .accessibilityIdentifier("任务草稿").accessibilityLabel("任务草稿").disabled(!model.writable).focused($editing)
                 Button { Task { await send() } } label: {
-                    Group { if sender.busy { ProgressView() } else { Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)) } }.frame(width: 28, height: 32)
+                    Group { if sender.busy || model.uploading { ProgressView() } else { Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)) } }.frame(width: 28, height: 32)
                 }.buttonStyle(.borderedProminent).disabled(!enabled)
                     .accessibilityLabel(running ? "追加指令" : "发送指令")
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(model.storageMessage ?? model.message ?? (snapshot?.readOnlyReason != nil ? "仅查看 · 草稿仍可编辑" : running ? "追加到当前轮次" : "输入指令，继续会话"))
+                Text(model.storageMessage ?? (model.importing ? "正在准备附件…" : model.message) ?? (snapshot?.readOnlyReason != nil ? "仅查看 · 草稿仍可编辑" : running ? "追加到当前轮次" : "输入指令或添加附件"))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 Spacer(minLength: 4)
                 Menu {
@@ -70,7 +71,10 @@ struct ComposerView: View {
     }
     private func send() async {
         if let snapshot {
-            let result = await model.submitInput(using: sender, snapshot: snapshot, mode: chosenMode, features: features)
+            let submittedContext = contextID
+            let result = await model.submitInput(using: sender, snapshot: snapshot, mode: chosenMode, features: features, stillCurrent: {
+                contextID == submittedContext && lifecycle.active && lifecycle.ready && session.selectedThreadID == snapshot.thread.id && session.snapshot?.cursor.epoch == snapshot.cursor.epoch
+            })
             if result?.state == .accepted && session.snapshot?.thread.id == snapshot.thread.id { await session.selectThread(snapshot.thread.id) }
         }
     }
@@ -115,7 +119,9 @@ private struct NewTaskFormView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: ComposerModel
     @State private var submitting = false
-    @FocusState private var editing: Bool
+    @State private var contextID = UUID()
+    @State private var editing = false
+    @ScaledMetric(relativeTo: .body) private var editorFontSize: CGFloat = 17
     init(serverID: UUID, projects: [Project], project: Project, selectedProjectID: Binding<String>, openThread: @escaping (String) -> Void) {
         self.projects = projects; self.project = project; self.openThread = openThread
         _selectedProjectID = selectedProjectID
@@ -123,7 +129,7 @@ private struct NewTaskFormView: View {
     }
     private var enabled: Bool {
         lifecycle.active && lifecycle.ready && settings.canCreate && model.writable &&
-        !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !submitting && !sender.busy &&
+        model.hasContent && !model.importing && !model.uploading && !submitting && !sender.busy &&
         sender.canSubmit(.create) && sender.blocked(method: .create, params: ["projectId": .string(project.id)]) == nil
     }
     var body: some View {
@@ -137,9 +143,15 @@ private struct NewTaskFormView: View {
                 } else { Text("沿用 Windows 当前默认配置。").font(.footnote).foregroundStyle(.secondary) }
             }
             Section("任务指令") {
-                TextEditor(text: $model.text).frame(minHeight: 160, maxHeight: 240)
-                    .accessibilityIdentifier("任务草稿").disabled(!model.writable).focused($editing)
-                Text(model.storageMessage ?? model.message ?? "草稿保存在本机，尚未提交。")
+                PasteTextView(text: $model.text, focused: $editing, fontSize: editorFontSize, editable: model.writable) { providers in
+                    Task { await AttachmentMediaImport.add(providers, to: model) }
+                }.frame(height: 160)
+                HStack {
+                    AttachmentControls(model: model)
+                    Text("每个附件最多20MB，一次最多10个").font(.caption).foregroundStyle(.secondary)
+                }
+                AttachmentStrip(model: model)
+                Text(model.storageMessage ?? (model.importing ? "正在准备附件…" : model.message) ?? "草稿保存在本机，尚未提交。")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section { OperationStatusView(openThread: openThread) }
@@ -152,19 +164,23 @@ private struct NewTaskFormView: View {
                     else { Text("创建并发送") }
                 }.disabled(!enabled)
             }
-            ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { editing = false } }
         }
         .interactiveDismissDisabled(submitting || sender.busy)
+        .onChange(of: lifecycle.active) { _ in contextID = UUID() }
+        .onDisappear { contextID = UUID() }
     }
     private func submit() {
         guard enabled else { return }
         submitting = true
         let draft = model, commandSender = sender, preference = settings.selection
-        let selectedProject = project.id, onCreated = openThread
+        let selectedProject = project.id, onCreated = openThread, submittedContext = contextID
         Task {
             defer { submitting = false }
             let result = await draft.submitCreate(using: commandSender, projectID: selectedProject,
-                                                  model: preference?.modelID, reasoning: preference?.reasoning)
+                                                  model: preference?.modelID, reasoning: preference?.reasoning,
+                                                  features: lifecycle.info?.features ?? [:], stillCurrent: {
+                contextID == submittedContext && lifecycle.active && lifecycle.ready && selectedProjectID == selectedProject
+            })
             if result?.state == .accepted, case .object(let data) = result?.result,
                case .string(let id) = data["threadId"], !id.isEmpty { onCreated(id) }
         }

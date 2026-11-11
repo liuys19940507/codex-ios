@@ -1,4 +1,6 @@
 import XCTest
+import UIKit
+import UniformTypeIdentifiers
 @testable import CodexRemote
 
 final class AttachmentTests: XCTestCase {
@@ -123,6 +125,41 @@ final class AttachmentTests: XCTestCase {
             let posts = await f.transport.posts; XCTAssertTrue(posts.isEmpty)
             XCTAssertEqual(f.model.attachments.count, 1)
         }
+    }
+
+    @MainActor
+    func testMissingAttachmentBytesDoNotClearTheExistingTextDraft() async throws {
+        let f = fixture(); f.model.text = "keep original"
+        try await f.model.importData(Data([1]), name: "missing.txt", kind: .file)
+        let item = try XCTUnwrap(f.model.attachments.first), file = try XCTUnwrap(f.model.previewURL(item))
+        XCTAssertTrue(file.path.hasPrefix(f.root.path + "/")); try FileManager.default.removeItem(at: file)
+        let reopened = ComposerModel(serverID: f.server, threadID: "thread", drafts: DraftStore(root: f.root.appendingPathComponent("drafts")))
+        XCTAssertEqual(reopened.text, "keep original"); XCTAssertFalse(reopened.writable)
+        XCTAssertNotNil(reopened.storageMessage)
+    }
+
+    @MainActor
+    func testCorruptAttachmentManifestIsPreservedAndBlocksSubmission() async throws {
+        let f = fixture(); f.model.text = "retained"
+        try await f.model.importData(Data([1]), name: "keep.txt", kind: .file)
+        let files = FileManager.default.enumerator(at: f.root, includingPropertiesForKeys: nil)!.allObjects.compactMap { $0 as? URL }
+        let manifest = try XCTUnwrap(files.first { $0.path.contains("/attachments/") && $0.pathExtension == "json" })
+        let broken = Data("{broken".utf8); try broken.write(to: manifest)
+        let reopened = ComposerModel(serverID: f.server, threadID: "thread", drafts: DraftStore(root: f.root.appendingPathComponent("drafts")))
+        XCTAssertFalse(reopened.writable); XCTAssertEqual(reopened.text, "retained")
+        XCTAssertEqual(try Data(contentsOf: manifest), broken)
+    }
+
+    @MainActor
+    func testClipboardClassificationKeepsTextAndWebURLsAsNativeText() {
+        XCTAssertFalse(AttachmentMediaImport.canImport(NSItemProvider(object: "copy text" as NSString)))
+        XCTAssertFalse(AttachmentMediaImport.canImport(NSItemProvider(object: NSURL(string: "https://example.invalid")!)))
+        let file = NSItemProvider(item: URL(fileURLWithPath: "/tmp/example.pdf") as NSURL, typeIdentifier: UTType.fileURL.identifier)
+        XCTAssertTrue(AttachmentMediaImport.canImport(file))
+        XCTAssertTrue(AttachmentMediaImport.canPasteType(UTType.png.identifier))
+        XCTAssertTrue(AttachmentMediaImport.canPasteType(UTType.pdf.identifier))
+        XCTAssertFalse(AttachmentMediaImport.canPasteType(UTType.utf8PlainText.identifier))
+        XCTAssertFalse(AttachmentMediaImport.canPasteType(UTType.url.identifier))
     }
 
     @MainActor

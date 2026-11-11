@@ -16,6 +16,8 @@ final class ComposerModel: ObservableObject {
     private let attachmentStore: AttachmentDraftStore
     private var importsInProgress = 0
     var hasContent: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty }
+    func beginAttachmentImport() { importsInProgress += 1; importing = true }
+    func endAttachmentImport() { importsInProgress = max(0, importsInProgress - 1); importing = importsInProgress > 0 }
     init(serverID: UUID, threadID: String, drafts: DraftStore = DraftStore(), attachmentStore: AttachmentDraftStore? = nil) {
         self.serverID = serverID; self.threadID = threadID; self.drafts = drafts
         self.attachmentStore = attachmentStore ?? AttachmentDraftStore(root: drafts.root.appendingPathComponent("attachments"))
@@ -33,8 +35,7 @@ final class ComposerModel: ObservableObject {
         guard writable else { throw ClientCommandError(message: "草稿存储暂不可用，请先核对本机存储。") }
         guard attachments.count < AttachmentLimits.count else { throw ClientCommandError(message: "一次最多添加10个附件。") }
         try AttachmentLimits.filename(name); try AttachmentLimits.data(data)
-        importsInProgress += 1; importing = true
-        defer { importsInProgress -= 1; importing = importsInProgress > 0 }
+        beginAttachmentImport(); defer { endAttachmentImport() }
         let store = attachmentStore, server = serverID
         let item = try await Task.detached(priority: .userInitiated) { try store.store(data, name: name, kind: kind, serverID: server) }.value
         try append(item)
