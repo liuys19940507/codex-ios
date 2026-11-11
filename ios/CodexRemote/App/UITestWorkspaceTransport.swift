@@ -10,6 +10,8 @@ actor UITestWorkspaceTransport: BridgeTransport {
     private var approvalCount = 0
     private var extraItems: [Item] = []
     private var replyOverride: Item?
+    private var uploaded: [String: AttachmentUpload] = [:]
+    private var createdAttachmentCount = 0
     private var history: [Envelope] = []
     private var subscribers: [UUID: AsyncThrowingStream<EventFrame, Error>.Continuation] = [:]
     init(activity: Bool = false) {
@@ -29,7 +31,7 @@ actor UITestWorkspaceTransport: BridgeTransport {
         let components = URLComponents(string: "https://fixture.invalid" + path)!
         switch components.path {
         case "/v1/info":
-            return ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "approvals": true, "threadMetadata": true]) as! T
+            return ServerInfo(apiVersion: 1, serverId: "fixture", codexVersion: "0.167.0", features: ["steer": true, "interrupt": true, "approvals": true, "threadMetadata": true, "attachments": true]) as! T
         case "/v1/projects":
             return [Project(id: "fixture-project", name: "Fixture Project", path: "C:/fixture")] as! T
         case "/v1/models":
@@ -43,7 +45,8 @@ actor UITestWorkspaceTransport: BridgeTransport {
             if parts[3] == "items" { return ItemPage(data: [], nextCursor: nil) as! T }
             if parts[3] == "metadata" { return thread as! T }
             guard parts[3] == "snapshot" else { throw ConnectionError.invalidPath }
-            var items = [Item(id: "reply", turnId: "fixture-turn", kind: "agentMessage", text: "Fixture reply", data: .object(["completed": .bool(true), "prefixComplete": .bool(true)]))]
+            let reply = thread.id == "created-fixture" && createdAttachmentCount > 0 ? "ATTACHMENTS_ACCEPTED_\(createdAttachmentCount)" : "Fixture reply"
+            var items = [Item(id: "reply", turnId: "fixture-turn", kind: "agentMessage", text: reply, data: .object(["completed": .bool(true), "prefixComplete": .bool(true)]))]
             if activity && thread.parentId == nil {
                 items = [Item(id: "user", turnId: "fixture-turn", kind: "userMessage", text: "检查任务渲染与跨端接管，保留中文和 emoji 😀", data: .object([:])),
                          Item(id: "reasoning", turnId: "fixture-turn", kind: "reasoning", text: "**检查会话状态**\n确认历史、草稿与控制权保持一致。", data: .object([:])),
@@ -67,10 +70,18 @@ actor UITestWorkspaceTransport: BridgeTransport {
     }
     func command(_ command: Command) async throws -> Operation {
         var result = JSONValue.null
+        let attachmentIDs: [String]
+        if case .array(let ids) = command.params["attachments"] {
+            attachmentIDs = ids.compactMap { if case .string(let id) = $0 { return id }; return nil }
+            guard attachmentIDs.count == ids.count, attachmentIDs.allSatisfy({ uploaded[$0] != nil }) else { throw ConnectionError.invalidResponse }
+        } else { attachmentIDs = [] }
         if command.method == .create {
             guard command.params["projectId"] == .string("fixture-project") else { throw ConnectionError.server(404, "Unknown project") }
             let thread = ThreadSummary(id: "created-fixture", projectId: "fixture-project", title: "Created fixture task", status: "idle", activeTurnId: nil, parentId: nil)
-            threads.append(thread); result = .object(["threadId": .string(thread.id)])
+            threads.append(thread); createdAttachmentCount = attachmentIDs.count; result = .object(["threadId": .string(thread.id)])
+        } else if command.method == .input, !attachmentIDs.isEmpty {
+            let reply = Item(id: "attachment-reply", turnId: "fixture-turn", kind: "agentMessage", text: "ATTACHMENTS_ACCEPTED_\(attachmentIDs.count)", data: .object(["completed": .bool(true), "prefixComplete": .bool(true)]))
+            extraItems.append(reply); publish("item/upsert", data: Self.json(reply))
         } else if command.method == .respond {
             guard command.params["requestId"] == .string("fixture-approval"), command.params["threadId"] == .string("fixture-thread"),
                   command.params["turnId"] == .string("fixture-turn"), command.params["response"] == .object(["decision": .string("accept")]),
@@ -89,6 +100,12 @@ actor UITestWorkspaceTransport: BridgeTransport {
             if command.method == .archive { threads.remove(at: index) }
         }
         return Operation(id: command.id, state: .accepted, result: result, message: nil)
+    }
+    func uploadAttachment(_ upload: AttachmentUpload) async throws -> UploadedAttachment {
+        guard upload.projectId == "fixture-project" else { throw ConnectionError.invalidPath }
+        uploaded[upload.id] = upload
+        return UploadedAttachment(id: upload.id, name: upload.name, kind: upload.kind,
+                                  size: upload.base64.flatMap { Data(base64Encoded: $0)?.count } ?? 0)
     }
     func emitNextOutput() {
         outputCount += 1
